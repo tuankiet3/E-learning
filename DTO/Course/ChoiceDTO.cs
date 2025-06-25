@@ -8,5 +8,7 @@ namespace E_learning.DTO.Course
         public string ChoiceText { get; set; }
         [Required(ErrorMessage = "IsCorrect field is required")]
         public bool IsCorrect { get; set; }
+        [Required(ErrorMessage = "Quiz ID is required")]
+        public string QuizID { get; set; }
     }
 }

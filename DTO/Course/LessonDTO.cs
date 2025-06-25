@@ -9,5 +9,7 @@ namespace E_learning.DTO.Course
         [Required(ErrorMessage = "Lesson URL is required")]
         [Url(ErrorMessage = "Invalid URL format")]
         public string lessonURL { get; set; }
+        [Required(ErrorMessage = "Course ID is required")]
+        public string courseID { get; set; }
     }
 }

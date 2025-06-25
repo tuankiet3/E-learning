@@ -22,7 +22,7 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Quizzes WHERE CourseID = @CourseID";
+                    string query = "SELECT * FROM Quiz WHERE CourseID = @CourseID";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@CourseID", courseID);
@@ -53,7 +53,7 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "DELETE FROM Quizzes WHERE QuizID = @QuizID";
+                    string query = "DELETE FROM Quiz WHERE QuizID = @QuizID";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@QuizID", quizID);
@@ -65,6 +65,31 @@ namespace E_learning.DAL.Course
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting quiz with ID: {QuizID}", quizID);
+                return false;
+            }
+        }
+
+        public async Task<bool> insertQuiz(QuizModel quiz)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Quiz (QuizID, QuizTitle, CourseID) VALUES (@QuizID, @QuizTitle, @CourseID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@QuizID", quiz.getQuizID());
+                        command.Parameters.AddWithValue("@QuizTitle", quiz.getQuizTitle());
+                        command.Parameters.AddWithValue("@CourseID", quiz.getCourseID());
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting quiz: {QuizTitle}", quiz.getQuizTitle());
                 return false;
             }
         }

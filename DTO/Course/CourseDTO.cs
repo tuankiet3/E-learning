@@ -13,5 +13,6 @@ namespace E_learning.DTO.Course
         [Required(ErrorMessage = "Author is not null")]
         public string Author { get; set; }
 
+
     }
 }

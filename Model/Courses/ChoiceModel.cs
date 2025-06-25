@@ -5,7 +5,7 @@
         private string ChoiceID { get; set; }
         private string ChoiceText { get; set; }
         private bool IsCorrect { get; set; }
-        private string QuestionID { get; set; }
+        private string QuizID { get; set; }
 
         public string GetChoiceID()
         {
@@ -31,20 +31,20 @@
         {
             IsCorrect = isCorrect;
         }
-        public string GetQuestionID()
+        public string GetQuizID()
         {
-            return QuestionID;
+            return QuizID;
         }
-        public void SetQuestionID(string questionID)
+        public void SetQuizID(string quizID)
         {
-            QuestionID = questionID;
+            QuizID = quizID;
         }
-        public ChoiceModel(string choiceID, string choiceText, bool isCorrect, string questionID)
+        public ChoiceModel(string choiceID, string choiceText, bool isCorrect, string quizID)
         {
             ChoiceID = choiceID;
             ChoiceText = choiceText;
             IsCorrect = isCorrect;
-            QuestionID = questionID;
+            QuizID = quizID;
         }
 
     }

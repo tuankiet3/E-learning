@@ -32,7 +32,7 @@ namespace E_learning.Controllers
         {
             try
             {
-               List<CoursesModel> courses = await _courseRepo.GetAllCourses();
+                List<CoursesModel> courses = await _courseRepo.GetAllCourses();
                 if (courses == null || courses.Count == 0)
                 {
                     return NotFound("No courses found");
@@ -63,12 +63,12 @@ namespace E_learning.Controllers
                     CourseID,
                     course.CourseName,
                     course.CoursePrice,
-                    course.AuthorID
+                    course.Author
                 );
-                bool isInserted = await _courseRepo.InsertCourse(course);
+                bool isInserted = await _courseRepo.InsertCourse(courseModel);
                 if (isInserted)
                 {
-                    return CreatedAtAction(nameof(GetAllCourses), new { id = course.GetCourseID() }, course);
+                    return Ok(new { Message = "Course inserted successfully." });
                 }
                 else
                 {
@@ -81,4 +81,60 @@ namespace E_learning.Controllers
                 return StatusCode(500, "Internal server error");
             }
         }
+
+        [HttpDelete("DeleteCourse/{courseID}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteCourse(string courseID)
+        {
+            if (string.IsNullOrEmpty(courseID))
+            {
+                return BadRequest("Course ID is null or empty");
+            }
+            try
+            {
+                bool isDeleted = await _courseRepo.DeleteCourse(courseID);
+                if (isDeleted)
+                {
+                    return NoContent();
+                }
+                else
+                {
+                    return NotFound("Course not found");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting course with ID: {CourseID}", courseID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("GetCourseByID/{courseID}")]
+        [ProducesResponseType(typeof(CoursesModel), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetCourseByID(string courseID)
+        {
+            if (string.IsNullOrEmpty(courseID))
+            {
+                return BadRequest("Course ID is null or empty");
+            }
+            try
+            {
+                CoursesModel course = await _courseRepo.GetCourseByID(courseID);
+                if (course == null)
+                {
+                    return NotFound("Course not found");
+                }
+                return Ok(course);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving course with ID: {CourseID}", courseID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+    }
 }

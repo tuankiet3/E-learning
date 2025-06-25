@@ -46,17 +46,18 @@ namespace E_learning.DAL.Course
             }
             return choices;
         }
-        public async Task<bool> DeleteChoicesByQuizID(string quizID)
+        
+        public async Task<bool> deleteChoice(string choiceID)
         {
             try
             {
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "DELETE FROM Choices WHERE QuizID = @QuizID";
+                    string query = "DELETE FROM Choices WHERE ChoiceID = @ChoiceID";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
-                        command.Parameters.AddWithValue("@QuizID", quizID);
+                        command.Parameters.AddWithValue("@ChoiceID", choiceID);
                         int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
                     }
@@ -64,7 +65,33 @@ namespace E_learning.DAL.Course
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error deleting choices for quiz ID: {QuizID}", quizID);
+                _logger.LogError(ex, "Error deleting choice with ID: {ChoiceID}", choiceID);
+                return false;
+            }
+        }
+
+        public async Task<bool> InsertChoice(ChoiceModel choice)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Choices (ChoiceID, ChoiceText, IsCorrect, QuizID) VALUES (@ChoiceID, @ChoiceText, @IsCorrect, @QuizID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@ChoiceID", choice.GetChoiceID());
+                        command.Parameters.AddWithValue("@ChoiceText", choice.GetChoiceText());
+                        command.Parameters.AddWithValue("@IsCorrect", choice.GetIsCorrect());
+                        command.Parameters.AddWithValue("@QuizID", choice.GetQuizID());
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting choice");
                 return false;
             }
         }

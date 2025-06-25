@@ -1,0 +1,104 @@
+﻿using Microsoft.AspNetCore.Mvc;
+using E_learning.Model.Courses;
+using System.Threading.Tasks;
+using E_learning.DAL.Course;
+using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
+using E_learning.DTO.Course;
+using E_learning.Repositories;
+using E_learning.Services;
+namespace E_learning.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ChoiceController : ControllerBase 
+    {
+        private readonly ILogger<CourseController> _logger;
+        private readonly ICourseRepository _courseRepo;
+        private readonly GenerateID _generateID;
+
+        public ChoiceController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        {
+            _logger = logger;
+            _courseRepo = courseRepo;
+            _generateID = generateID;
+        }
+
+        [HttpGet("GetChoicesByQuizID/{quizID}")]
+        [ProducesResponseType(typeof(IEnumerable<ChoiceModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetChoicesByQuizID(string quizID)
+        {
+            try
+            {
+                List<ChoiceModel> choices = await _courseRepo.GetChoicesByQuizID(quizID);
+                if (choices == null || choices.Count == 0)
+                {
+                    return NotFound("No choices found for the specified quiz ID");
+                }
+                return Ok(choices);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving choices for quiz ID: {QuizID}", quizID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpDelete("DeleteChoice/{choiceID}")]
+        [ProducesResponseType(statusCode: 204)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteChoice(string choiceID)
+        {
+            try
+            {
+                bool isDeleted = await _courseRepo.DeleteChoice(choiceID);
+                if (!isDeleted)
+                {
+                    return NotFound("Choice not found");
+                }
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting choice with ID: {ChoiceID}", choiceID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpPost("InsertChoice")]
+        [ProducesResponseType(typeof(ChoiceModel), statusCode: 201)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> InsertChoice([FromBody] ChoiceDTO choice)
+        {
+            if (choice == null)
+            {
+                return BadRequest("Choice data is null");
+            }
+            try
+            {
+                string choiceID = _generateID.generateChoiceID();
+                ChoiceModel choiceModel = new ChoiceModel(
+                    choiceID,
+                    choice.ChoiceText,
+                    choice.IsCorrect,
+                    choice.QuizID
+                );
+                bool isInserted = await _courseRepo.InsertChoice(choiceModel);
+                if (!isInserted)
+                {
+                    return StatusCode(500, "Error inserting choice");
+                }
+                return CreatedAtAction(nameof(GetChoicesByQuizID), new { quizID = choice.QuizID }, choiceModel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting choice");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+    }
+}

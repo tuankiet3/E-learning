@@ -47,17 +47,17 @@ namespace E_learning.DAL.Course
             return lessons;
         }
 
-        public async Task<bool> deleteLesson(string courseID)
+        public async Task<bool> deleteLesson(string lessonID)
         {
             try
             {
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "DELETE FROM Lessons WHERE CourseID = @CourseID";
+                    string query = "DELETE FROM Lessons WHERE LessonID = @LessonID";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
-                        command.Parameters.AddWithValue("@CourseID", courseID);
+                        command.Parameters.AddWithValue("@LessonID", lessonID);
                         int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
                     }
@@ -65,7 +65,33 @@ namespace E_learning.DAL.Course
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error deleting lessons for course ID: {CourseID}", courseID);
+                _logger.LogError(ex, "Error deleting lessons for course ID: {LessonID}", lessonID);
+                return false;
+            }
+        }
+
+        public async Task<bool> insertLesson(LessonModel lesson)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Lessons (LessonID, LessonTitle, LessonURL, CourseID) VALUES (@LessonID, @LessonTitle, @LessonURL, @CourseID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@LessonID", lesson.GetLessonID());
+                        command.Parameters.AddWithValue("@LessonTitle", lesson.GetLessonTitle());
+                        command.Parameters.AddWithValue("@LessonURL", lesson.GetLessonURL());
+                        command.Parameters.AddWithValue("@CourseID", lesson.GetCourseID());
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting lesson with ID: {LessonID}", lesson.GetLessonID());
                 return false;
             }
         }

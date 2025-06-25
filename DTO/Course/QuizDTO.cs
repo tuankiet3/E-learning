@@ -6,6 +6,7 @@ namespace E_learning.DTO.Course
     {
         [Required(ErrorMessage = "Quiz title is required")]
         public string QuizTitle { get; set; }
-       
+        [Required(ErrorMessage = "Course ID is required")]
+        public string courseID { get; set; }
     }
 }

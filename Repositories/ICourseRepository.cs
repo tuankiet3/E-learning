@@ -1,4 +1,6 @@
-﻿namespace E_learning.Model.Courses
+﻿using E_learning.Model.Courses;
+
+namespace E_learning.Repositories
 {
     public interface ICourseRepository
     {
@@ -11,16 +13,18 @@
 
             // Lessons
             Task<List<LessonModel>> GetLessonsByCourseID(string courseID);
-            Task<bool> DeleteLessonsByCourseID(string courseID);
-
-            // Quizzes
+            Task<bool> DeleteLessons(string courseID);
+            Task<bool> InsertLesson(LessonModel lesson);
+    
+        // Quizzes
             Task<List<QuizModel>> GetQuizzesByCourseID(string courseID);
             Task<bool> DeleteQuiz(string quizID);
-
-            // Choices
+            Task<bool> InsertQuiz(QuizModel quiz);
+        // Choices
             Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID);
-            Task<bool> DeleteChoicesByQuizID(string quizID);
-    
+            Task<bool> DeleteChoice(string choiceID);
+            Task<bool> InsertChoice(ChoiceModel choice);
+
 
     }
 }
