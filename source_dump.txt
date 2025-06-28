@@ -1,0 +1,1795 @@
+# ==================================================
+# Path: E:\WorkSpace\.NET\E-learning
+# Detected tech: csharp
+# ==================================================
+
+## DIRECTORY STRUCTURE
+```
+E-learning/
+├── .git/
+├── .github/
+├── .vs/
+├── Controllers/
+│   ├── AuthController.cs
+│   ├── ChoiceController.cs
+│   ├── CourseController.cs
+│   ├── LessonController.cs
+│   └── QuizController.cs
+├── DAL/
+│   ├── Auth/
+│   │   └── AuthDAL.cs
+│   └── Course/
+│       ├── ChoiceDAL.cs
+│       ├── CoursesDAL.cs
+│       ├── LessonDAL.cs
+│       └── QuizDAL.cs
+├── DTO/
+│   ├── Course/
+│   │   ├── ChoiceDTO.cs
+│   │   ├── CourseDTO.cs
+│   │   ├── LessonDTO.cs
+│   │   └── QuizDTO.cs
+│   ├── LoginDTO.cs
+│   └── RegisterDTO.cs
+├── Model/
+│   ├── Courses/
+│   │   ├── ChoiceModel.cs
+│   │   ├── CoursesModel.cs
+│   │   ├── LessonModel.cs
+│   │   └── QuizModel.cs
+│   └── Users/
+│       └── UserModel.cs
+├── Properties/
+│   └── launchSettings.json
+├── Repositories/
+│   ├── AuthRepository.cs
+│   ├── CourseRepository.cs
+│   ├── IAuthRepository.cs
+│   └── ICourseRepository.cs
+├── Services/
+│   └── GenerateID.cs
+├── bin/
+├── obj/
+├── .gitignore
+├── E-learning.csproj
+├── E-learning.csproj.user
+├── E-learning.http
+├── E-learning.sln
+├── Program.cs
+├── appsettings.Development.json
+└── appsettings.json
+```
+
+## FILE CONTENTS
+
+### Program.cs
+```cs
+﻿using E_learning.Repositories;
+using E_learning.DAL.Course;
+using E_learning.DAL.Auth;
+using E_learning.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Lấy chuỗi kết nối
+var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection");
+
+
+// Đăng ký các DAL
+builder.Services.AddSingleton(provider => new CoursesDAL(connectionString, provider.GetRequiredService<ILogger<CoursesDAL>>()));
+builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provider.GetRequiredService<ILogger<LessonDAL>>()));
+builder.Services.AddSingleton(provider => new QuizDAL(connectionString, provider.GetRequiredService<ILogger<QuizDAL>>()));
+builder.Services.AddSingleton(provider => new ChoiceDAL(connectionString, provider.GetRequiredService<ILogger<ChoiceDAL>>()));
+builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider.GetRequiredService<ILogger<AuthDAL>>()));
+
+
+// Đăng ký Repository và các service khác
+builder.Services.AddScoped<ICourseRepository, CourseRepository>();
+builder.Services.AddScoped<GenerateID>();
+
+
+// === CẤU HÌNH JWT AUTHENTICATION ===
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+    };
+});
+
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+
+app.UseAuthentication(); 
+app.UseAuthorization(); 
+
+app.MapControllers();
+
+app.Run();
+```
+
+### Controllers\AuthController.cs
+```cs
+﻿using Microsoft.AspNetCore.Mvc;
+using E_learning.DTO;
+using E_learning.Model.Users;
+using E_learning.Repositories;
+using Microsoft.AspNetCore.Components;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using E_learning.Services;
+using Microsoft.AspNetCore.Authorization;
+
+namespace E_learning.Controllers
+{
+    [ApiController]
+    [Microsoft.AspNetCore.Mvc.Route("api/[controller]")]
+    public class AuthController : ControllerBase
+    {
+        private readonly IAuthRepository _authRepo ;
+        private readonly IConfiguration _configuration;
+        private readonly GenerateID _generateID;
+
+        public AuthController(IAuthRepository authRepo, IConfiguration configuration)
+        {
+            _authRepo = authRepo;
+            _configuration = configuration;
+        }
+
+        [HttpPost("register")]
+        [AllowAnonymous] 
+        public async Task<IActionResult> Register([FromBody] RegisterDTO registerDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var userExists = await _authRepo.CheckUsernameExistsAsync(registerDto.Username);
+            if (userExists)
+            {
+                return BadRequest(new { Message = "Username already exists" });
+            }
+
+            var user = new UserModel
+            {
+                UserID = _generateID.generateUserID(),
+                Username = registerDto.Username,
+                Email = registerDto.Email,
+                FirstName = registerDto.FirstName,
+                LastName = registerDto.LastName,
+                Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
+                UserRole = "Student"
+            };
+
+            var result = await _authRepo.AddUserAsync(user);
+
+            if (!result)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { Message = "User creation failed! Please check server logs." });
+            }
+
+            return Ok(new { Message = "User created successfully!" });
+        }
+
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginDTO loginDto)
+        {
+            var user = await _authRepo.GetUserByUsernameAsync(loginDto.Username);
+
+            if (user == null || !BCrypt.Net.BCrypt.Verify(loginDto.Password, user.Password))
+            {
+                return Unauthorized(new { Message = "Invalid username or password" });
+            }
+
+            var token = GenerateJwtToken(user);
+
+            return Ok(new { token = token });
+        }
+
+        private string GenerateJwtToken(UserModel user)
+        {
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.UserID),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim(ClaimTypes.Role, user.UserRole)
+            };
+
+            var token = new JwtSecurityToken(
+                issuer: _configuration["Jwt:Issuer"],
+                audience: _configuration["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.Now.AddHours(3),
+                signingCredentials: credentials);
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+    }
+}
+
+```
+
+### Controllers\ChoiceController.cs
+```cs
+﻿using Microsoft.AspNetCore.Mvc;
+using E_learning.Model.Courses;
+using System.Threading.Tasks;
+using E_learning.DAL.Course;
+using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
+using E_learning.DTO.Course;
+using E_learning.Repositories;
+using E_learning.Services;
+namespace E_learning.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ChoiceController : ControllerBase 
+    {
+        private readonly ILogger<CourseController> _logger;
+        private readonly ICourseRepository _courseRepo;
+        private readonly GenerateID _generateID;
+
+        public ChoiceController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        {
+            _logger = logger;
+            _courseRepo = courseRepo;
+            _generateID = generateID;
+        }
+
+        [HttpGet("GetChoicesByQuizID/{quizID}")]
+        [ProducesResponseType(typeof(IEnumerable<ChoiceModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetChoicesByQuizID(string quizID)
+        {
+            try
+            {
+                List<ChoiceModel> choices = await _courseRepo.GetChoicesByQuizID(quizID);
+                if (choices == null || choices.Count == 0)
+                {
+                    return NotFound("No choices found for the specified quiz ID");
+                }
+                return Ok(choices);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving choices for quiz ID: {QuizID}", quizID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpDelete("DeleteChoice/{choiceID}")]
+        [ProducesResponseType(statusCode: 204)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteChoice(string choiceID)
+        {
+            try
+            {
+                bool isDeleted = await _courseRepo.DeleteChoice(choiceID);
+                if (!isDeleted)
+                {
+                    return NotFound("Choice not found");
+                }
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting choice with ID: {ChoiceID}", choiceID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpPost("InsertChoice")]
+        [ProducesResponseType(typeof(ChoiceModel), statusCode: 201)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> InsertChoice([FromBody] ChoiceDTO choice)
+        {
+            if (choice == null)
+            {
+                return BadRequest("Choice data is null");
+            }
+            try
+            {
+                string choiceID = _generateID.generateChoiceID();
+                ChoiceModel choiceModel = new ChoiceModel(
+                    choiceID,
+                    choice.ChoiceText,
+                    choice.IsCorrect,
+                    choice.QuizID
+                );
+                bool isInserted = await _courseRepo.InsertChoice(choiceModel);
+                if (!isInserted)
+                {
+                    return StatusCode(500, "Error inserting choice");
+                }
+                return CreatedAtAction(nameof(GetChoicesByQuizID), new { quizID = choice.QuizID }, choiceModel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting choice");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+    }
+}
+
+```
+
+### Controllers\CourseController.cs
+```cs
+﻿using Microsoft.AspNetCore.Mvc;
+using E_learning.Model.Courses;
+using System.Threading.Tasks;
+using E_learning.DAL.Course;
+using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
+using E_learning.DTO.Course;
+using E_learning.Repositories;
+using E_learning.Services;
+namespace E_learning.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class CourseController : Controller
+    {
+        private readonly ILogger<CourseController> _logger;
+        private readonly ICourseRepository _courseRepo;
+        private readonly GenerateID _generateID;
+
+        public CourseController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        {
+            _logger = logger;
+            _courseRepo = courseRepo;
+            _generateID = generateID;
+        }
+
+        [HttpGet("GetAllCourses")]
+        [ProducesResponseType(typeof(IEnumerable<CoursesModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetAllCourses()
+        {
+            try
+            {
+                List<CoursesModel> courses = await _courseRepo.GetAllCourses();
+                if (courses == null || courses.Count == 0)
+                {
+                    return NotFound("No courses found");
+                }
+                return Ok(courses);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all courses");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpPost("InsertCourse")]
+        [ProducesResponseType(typeof(CoursesModel), statusCode: 201)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> InsertCourse([FromBody] CourseDTO course)
+        {
+            if (course == null)
+            {
+                return BadRequest("Course data is null");
+            }
+            try
+            {
+                string CourseID = _generateID.generateCourseID();
+                CoursesModel courseModel = new CoursesModel(
+                    CourseID,
+                    course.CourseName,
+                    course.CoursePrice,
+                    course.Author
+                );
+                bool isInserted = await _courseRepo.InsertCourse(courseModel);
+                if (isInserted)
+                {
+                    return Ok(new { Message = "Course inserted successfully." });
+                }
+                else
+                {
+                    return BadRequest("Failed to insert course");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting course");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpDelete("DeleteCourse/{courseID}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteCourse(string courseID)
+        {
+            if (string.IsNullOrEmpty(courseID))
+            {
+                return BadRequest("Course ID is null or empty");
+            }
+            try
+            {
+                bool isDeleted = await _courseRepo.DeleteCourse(courseID);
+                if (isDeleted)
+                {
+                    return NoContent();
+                }
+                else
+                {
+                    return NotFound("Course not found");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting course with ID: {CourseID}", courseID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("GetCourseByID/{courseID}")]
+        [ProducesResponseType(typeof(CoursesModel), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetCourseByID(string courseID)
+        {
+            if (string.IsNullOrEmpty(courseID))
+            {
+                return BadRequest("Course ID is null or empty");
+            }
+            try
+            {
+                CoursesModel course = await _courseRepo.GetCourseByID(courseID);
+                if (course == null)
+                {
+                    return NotFound("Course not found");
+                }
+                return Ok(course);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving course with ID: {CourseID}", courseID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+    }
+}
+
+```
+
+### Controllers\LessonController.cs
+```cs
+﻿using Microsoft.AspNetCore.Mvc;
+using E_learning.Model.Courses;
+using System.Threading.Tasks;
+using E_learning.DAL.Course;
+using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
+using E_learning.DTO.Course;
+using E_learning.Repositories;
+using E_learning.Services;
+namespace E_learning.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class LessonController : ControllerBase
+    {
+        private readonly ILogger<CourseController> _logger;
+        private readonly ICourseRepository _courseRepo;
+        private readonly GenerateID _generateID;
+        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        {
+            _logger = logger;
+            _courseRepo = courseRepo;
+            _generateID = generateID;
+        }
+        [HttpGet("GetLessonsByCourseID/{courseID}")]
+        [ProducesResponseType(typeof(IEnumerable<LessonModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetLessonsByCourseID(string courseID)
+        {
+            try
+            {
+                List<LessonModel> lessons = await _courseRepo.GetLessonsByCourseID(courseID);
+                if (lessons == null || lessons.Count == 0)
+                {
+                    return NotFound("No lessons found for the specified course ID");
+                }
+                return Ok(lessons);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving lessons for course ID: {CourseID}", courseID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpDelete("DeleteLesson/{lessonID}")]
+        [ProducesResponseType(statusCode: 204)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteLesson(string lessonID)
+        {
+            try
+            {
+                bool isDeleted = await _courseRepo.DeleteLessons(lessonID);
+                if (!isDeleted)
+                {
+                    return NotFound("Lesson not found");
+                }
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting lesson with ID: {LessonID}", lessonID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+        [HttpPost("InsertLesson")]
+        [ProducesResponseType(typeof(LessonModel), statusCode: 201)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> InsertLesson([FromBody] LessonDTO lesson)
+        {
+            if (lesson == null)
+            {
+                return BadRequest("Lesson data is null");
+            }
+            try
+            {
+                string lessonID = _generateID.generateLessonID();
+                LessonModel lessonModel = new LessonModel(
+                    lessonID,
+                    lesson.lessonTitle,
+                    lesson.lessonURL,
+                    lesson.courseID
+                );
+                bool isInserted = await _courseRepo.InsertLesson(lessonModel);
+                if (!isInserted)
+                {
+                    return StatusCode(500, "Error inserting lesson");
+                }
+                return CreatedAtAction(nameof(GetLessonsByCourseID), new { courseID = lesson.courseID }, lessonModel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting lesson");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+    }
+}
+
+```
+
+### Controllers\QuizController.cs
+```cs
+﻿using E_learning.Repositories;
+using E_learning.Services;
+using Microsoft.AspNetCore.Mvc;
+using E_learning.Model.Courses;
+using E_learning.DTO.Course;
+namespace E_learning.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class QuizController : ControllerBase
+    {
+        private readonly ILogger<CourseController> _logger;
+        private readonly ICourseRepository _courseRepo;
+        private readonly GenerateID _generateID;
+        public QuizController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        {
+            _logger = logger;
+            _courseRepo = courseRepo;
+            _generateID = generateID;
+        }
+
+        [HttpGet("GetQuizzesByCourseID/{courseID}")]
+        [ProducesResponseType(typeof(IEnumerable<QuizModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetQuizzesByCourseID(string courseID)
+        {
+            try
+            {
+                List<QuizModel> quizzes = await _courseRepo.GetQuizzesByCourseID(courseID);
+                if (quizzes == null || quizzes.Count == 0)
+                {
+                    return NotFound("No quizzes found for the specified course ID");
+                }
+                return Ok(quizzes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving quizzes for course ID: {CourseID}", courseID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+        [HttpDelete("DeleteQuiz/{quizID}")]
+        [ProducesResponseType(statusCode: 204)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteQuiz(string quizID)
+        {
+            try
+            {
+                bool isDeleted = await _courseRepo.DeleteQuiz(quizID);
+                if (!isDeleted)
+                {
+                    return NotFound("Quiz not found");
+                }
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting quiz with ID: {QuizID}", quizID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+        [HttpPost("InsertQuiz")]
+        [ProducesResponseType(typeof(QuizModel), statusCode: 201)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> InsertQuiz([FromBody] QuizDTO quiz)
+        {
+            if (quiz == null)
+            {
+                return BadRequest("Quiz data is null");
+            }
+            try
+            {
+                string quizID = _generateID.generateQuizID();
+                QuizModel quizModel = new QuizModel(
+                    quizID,
+                    quiz.QuizTitle,
+                    quiz.courseID
+                );
+                bool isInserted = await _courseRepo.InsertQuiz(quizModel);
+                if (!isInserted)
+                {
+                    return StatusCode(500, "Failed to insert quiz");
+                }
+                return CreatedAtAction(nameof(GetQuizzesByCourseID), new { courseID = quiz.courseID }, quizModel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting quiz");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+    }
+}
+
+```
+
+### DAL\Auth\AuthDAL.cs
+```cs
+﻿using E_learning.Model.Users;
+using Microsoft.Data.SqlClient;
+
+namespace E_learning.DAL.Auth
+{
+    public class AuthDAL
+    {
+        private readonly string _connectionString;
+        private readonly ILogger<AuthDAL> _logger;
+
+        public AuthDAL(string connectionString, ILogger<AuthDAL> logger)
+        {
+            _connectionString = connectionString;
+            _logger = logger;
+        }
+
+        public async Task<UserModel> GetUserByUsername(string username)
+        {
+            UserModel user = null;
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Users WHERE Username = @Username";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@Username", username);
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            if (await reader.ReadAsync())
+                            {
+                                user = new UserModel
+                                {
+                                    UserID = reader.GetString(reader.GetOrdinal("UserID")),
+                                    Username = reader.GetString(reader.GetOrdinal("Username")),
+                                    Password = reader.GetString(reader.GetOrdinal("Password")), 
+                                    Email = reader.GetString(reader.GetOrdinal("Email")),
+                                    UserRole = reader.GetString(reader.GetOrdinal("UserRole"))
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving user by username: {Username}", username);
+            }
+            return user;
+        }
+        public async Task<bool> CheckUsernameExistsAsync(string username)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT COUNT(1) FROM Users WHERE Username = @Username";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@Username", username);
+                        int count = (int)await command.ExecuteScalarAsync();
+                        return count > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking if username exists: {Username}", username);
+                return true; 
+            }
+        }
+
+        public async Task<bool> AddUserAsync(UserModel user)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, UserRole) 
+                             VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName, @UserRole)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@UserID", user.UserID);
+                        command.Parameters.AddWithValue("@Username", user.Username);
+                        command.Parameters.AddWithValue("@Password", user.Password);
+                        command.Parameters.AddWithValue("@Email", user.Email);
+                        command.Parameters.AddWithValue("@FirstName", user.FirstName);
+                        command.Parameters.AddWithValue("@LastName", user.LastName);
+                        command.Parameters.AddWithValue("@UserRole", user.UserRole);
+
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding new user: {Username}", user.Username);
+                return false;
+            }
+        }
+    }
+}
+
+```
+
+### DAL\Course\ChoiceDAL.cs
+```cs
+﻿using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using E_learning.Model.Courses;
+namespace E_learning.DAL.Course
+{
+    public class ChoiceDAL
+    {
+        private readonly string _connectionString;
+        private readonly ILogger<ChoiceDAL> _logger;
+        public ChoiceDAL(string connectionString, ILogger<ChoiceDAL> logger)
+        {
+            _connectionString = connectionString;
+            _logger = logger;
+        }
+        public async Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID)
+        {
+            List<ChoiceModel> choices = new List<ChoiceModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Choices WHERE QuizID = @QuizID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@QuizID", quizID);
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string choiceID = reader.GetString(reader.GetOrdinal("ChoiceID"));
+                                string choiceText = reader.GetString(reader.GetOrdinal("ChoiceText"));
+                                bool isCorrect = reader.GetBoolean(reader.GetOrdinal("IsCorrect"));
+                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, quizID);
+                                choices.Add(choice);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving choices for quiz ID: {QuizID}", quizID);
+            }
+            return choices;
+        }
+        
+        public async Task<bool> deleteChoice(string choiceID)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "DELETE FROM Choices WHERE ChoiceID = @ChoiceID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@ChoiceID", choiceID);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting choice with ID: {ChoiceID}", choiceID);
+                return false;
+            }
+        }
+
+        public async Task<bool> InsertChoice(ChoiceModel choice)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Choices (ChoiceID, ChoiceText, IsCorrect, QuizID) VALUES (@ChoiceID, @ChoiceText, @IsCorrect, @QuizID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@ChoiceID", choice.GetChoiceID());
+                        command.Parameters.AddWithValue("@ChoiceText", choice.GetChoiceText());
+                        command.Parameters.AddWithValue("@IsCorrect", choice.GetIsCorrect());
+                        command.Parameters.AddWithValue("@QuizID", choice.GetQuizID());
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting choice");
+                return false;
+            }
+        }
+    }
+}
+
+```
+
+### DAL\Course\CoursesDAL.cs
+```cs
+﻿using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using E_learning.Model;
+using E_learning.Model.Courses;
+namespace E_learning.DAL.Course
+{
+    public class CoursesDAL
+    {
+        private readonly string _connectionString;
+        private readonly ILogger<CoursesDAL> _logger;
+        public CoursesDAL(string connectionString, ILogger<CoursesDAL> logger)
+        {
+            _connectionString = connectionString;
+            _logger = logger;
+        }
+
+        public async Task<List<CoursesModel>> getAllCourse()
+        {
+            List<CoursesModel> courses = new List<CoursesModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Courses";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
+                                string courseName = reader.GetString(reader.GetOrdinal("CourseName"));
+                                decimal coursePrice = reader.GetDecimal(reader.GetOrdinal("CoursePrice"));
+                                string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
+                                CoursesModel course = new CoursesModel(courseID, courseName, coursePrice, authorID);
+                                courses.Add(course);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving courses");
+            }
+            return courses;
+        }
+
+        public async Task<bool> InsertCourse(CoursesModel course)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Courses (CourseID, CourseName, CoursePrice, AuthorID) VALUES (@CourseID, @CourseName, @CoursePrice, @AuthorID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@CourseID", course.GetCourseID());
+                        command.Parameters.AddWithValue("@CourseName", course.GetCourseName());
+                        command.Parameters.AddWithValue("@CoursePrice", course.GetCoursePrice());
+                        command.Parameters.AddWithValue("@AuthorID", course.GetAuthorID());
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting course");
+                return false;
+            }
+        }
+
+        public async Task<bool> deleteCourse(string courseID)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "DELETE FROM Courses WHERE CourseID = @CourseID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@CourseID", courseID);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting course");
+                return false;
+            }
+        }
+
+        public async Task<CoursesModel> getCourseByID(string courseID)
+        {
+            CoursesModel course = null;
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Courses WHERE CourseID = @CourseID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@CourseID", courseID);
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            if (await reader.ReadAsync())
+                            {
+                                string courseName = reader.GetString(reader.GetOrdinal("CourseName"));
+                                decimal coursePrice = reader.GetDecimal(reader.GetOrdinal("CoursePrice"));
+                                string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
+                                course = new CoursesModel(courseID, courseName, coursePrice, authorID);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving course by ID");
+            }
+            return course;
+        }
+    }
+}
+
+```
+
+### DAL\Course\LessonDAL.cs
+```cs
+﻿using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using E_learning.Model.Courses;
+namespace E_learning.DAL.Course
+{
+    public class LessonDAL
+    {
+        private readonly string _connectionString;
+        private readonly ILogger<LessonDAL> _logger;
+        public LessonDAL(string connectionString, ILogger<LessonDAL> logger)
+        {
+            _connectionString = connectionString;
+            _logger = logger;
+        }
+        public async Task<List<LessonModel>> GetLessonByCourseID(string courseID)
+        {
+            List<LessonModel> lessons = new List<LessonModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Lessons WHERE CourseID = @CourseID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@CourseID", courseID);
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string lessonID = reader.GetString(reader.GetOrdinal("LessonID"));
+                                string lessonTitle = reader.GetString(reader.GetOrdinal("LessonTitle"));
+                                string lessonURL = reader.GetString(reader.GetOrdinal("LessonURL"));
+                                LessonModel lesson = new LessonModel(lessonID, lessonTitle, lessonURL, courseID);
+                                lessons.Add(lesson);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving lessons for course ID: {CourseID}", courseID);
+            }
+            return lessons;
+        }
+
+        public async Task<bool> deleteLesson(string lessonID)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "DELETE FROM Lessons WHERE LessonID = @LessonID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@LessonID", lessonID);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting lessons for course ID: {LessonID}", lessonID);
+                return false;
+            }
+        }
+
+        public async Task<bool> insertLesson(LessonModel lesson)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Lessons (LessonID, LessonTitle, LessonURL, CourseID) VALUES (@LessonID, @LessonTitle, @LessonURL, @CourseID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@LessonID", lesson.GetLessonID());
+                        command.Parameters.AddWithValue("@LessonTitle", lesson.GetLessonTitle());
+                        command.Parameters.AddWithValue("@LessonURL", lesson.GetLessonURL());
+                        command.Parameters.AddWithValue("@CourseID", lesson.GetCourseID());
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting lesson with ID: {LessonID}", lesson.GetLessonID());
+                return false;
+            }
+        }
+    }
+}
+
+```
+
+### DAL\Course\QuizDAL.cs
+```cs
+﻿using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using E_learning.Model.Courses;
+namespace E_learning.DAL.Course
+{
+    public class QuizDAL
+    {
+        private readonly string _connectionString;
+        private readonly ILogger<QuizDAL> _logger;
+        public QuizDAL(string connectionString, ILogger<QuizDAL> logger)
+        {
+            _connectionString = connectionString;
+            _logger = logger;
+        }
+        public async Task<List<QuizModel>> GetQuizByCourseID(string courseID)
+        {
+            List<QuizModel> quizzes = new List<QuizModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Quiz WHERE CourseID = @CourseID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@CourseID", courseID);
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
+                                string quizTitle = reader.GetString(reader.GetOrdinal("QuizTitle"));
+                                QuizModel quiz = new QuizModel(quizID, quizTitle,courseID);
+                                quizzes.Add(quiz);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving quizzes for course ID: {CourseID}", courseID);
+            }
+            return quizzes;
+        }
+
+        public async Task<bool> DeleteQuiz(string quizID)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "DELETE FROM Quiz WHERE QuizID = @QuizID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@QuizID", quizID);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting quiz with ID: {QuizID}", quizID);
+                return false;
+            }
+        }
+
+        public async Task<bool> insertQuiz(QuizModel quiz)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Quiz (QuizID, QuizTitle, CourseID) VALUES (@QuizID, @QuizTitle, @CourseID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@QuizID", quiz.getQuizID());
+                        command.Parameters.AddWithValue("@QuizTitle", quiz.getQuizTitle());
+                        command.Parameters.AddWithValue("@CourseID", quiz.getCourseID());
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting quiz: {QuizTitle}", quiz.getQuizTitle());
+                return false;
+            }
+        }
+    }
+}
+
+```
+
+### DTO\LoginDTO.cs
+```cs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace E_learning.DTO
+{
+    public class LoginDTO
+    {
+        [Required]
+        public string Username { get; set; }
+
+        [Required]
+        public string Password { get; set; }
+    }
+}
+
+```
+
+### DTO\RegisterDTO.cs
+```cs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace E_learning.DTO
+{
+    public class RegisterDTO
+    {
+        [Required(ErrorMessage = "Username is required")]
+        [MinLength(3, ErrorMessage = "Username must be at least 3 characters")]
+        public string Username { get; set; }
+
+        [Required(ErrorMessage = "Password is required")]
+        [MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
+        public string Password { get; set; }
+
+        [Required(ErrorMessage = "Email is required")]
+        [EmailAddress(ErrorMessage = "Invalid Email Address")]
+        public string Email { get; set; }
+
+        [Required(ErrorMessage = "First name is required")]
+        public string FirstName { get; set; }
+
+        [Required(ErrorMessage = "Last name is required")]
+        public string LastName { get; set; }
+    }
+}
+
+```
+
+### DTO\Course\ChoiceDTO.cs
+```cs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace E_learning.DTO.Course
+{
+    public class ChoiceDTO
+    {
+        [Required(ErrorMessage = "Choice text is required")]
+        public string ChoiceText { get; set; }
+        [Required(ErrorMessage = "IsCorrect field is required")]
+        public bool IsCorrect { get; set; }
+        [Required(ErrorMessage = "Quiz ID is required")]
+        public string QuizID { get; set; }
+    }
+}
+
+```
+
+### DTO\Course\CourseDTO.cs
+```cs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace E_learning.DTO.Course
+{
+    public class CourseDTO
+    {
+        [Required(ErrorMessage = "Course name is not null")]
+        public string CourseName { get; set; }
+
+        [Required(ErrorMessage = "Course price is not null")]
+        [Range(0, double.MaxValue, ErrorMessage = "Course price must be positive")]
+        public decimal CoursePrice { get; set; }
+        [Required(ErrorMessage = "Author is not null")]
+        public string Author { get; set; }
+
+
+    }
+}
+
+```
+
+### DTO\Course\LessonDTO.cs
+```cs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace E_learning.DTO.Course
+{
+    public class LessonDTO
+    {
+        [Required(ErrorMessage = "Lesson title is required")]
+        public string lessonTitle { get; set; }
+        [Required(ErrorMessage = "Lesson URL is required")]
+        [Url(ErrorMessage = "Invalid URL format")]
+        public string lessonURL { get; set; }
+        [Required(ErrorMessage = "Course ID is required")]
+        public string courseID { get; set; }
+    }
+}
+
+```
+
+### DTO\Course\QuizDTO.cs
+```cs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace E_learning.DTO.Course
+{
+    public class QuizDTO
+    {
+        [Required(ErrorMessage = "Quiz title is required")]
+        public string QuizTitle { get; set; }
+        [Required(ErrorMessage = "Course ID is required")]
+        public string courseID { get; set; }
+    }
+}
+
+```
+
+### Model\Courses\ChoiceModel.cs
+```cs
+﻿namespace E_learning.Model.Courses
+{
+    public class ChoiceModel
+    {
+        private string ChoiceID { get; set; }
+        private string ChoiceText { get; set; }
+        private bool IsCorrect { get; set; }
+        private string QuizID { get; set; }
+
+        public string GetChoiceID()
+        {
+            return ChoiceID;
+        }
+        public void SetChoiceID(string choiceID)
+        {
+            ChoiceID = choiceID;
+        }
+        public string GetChoiceText()
+        {
+            return ChoiceText;
+        }
+        public void SetChoiceText(string choiceText)
+        {
+            ChoiceText = choiceText;
+        }
+        public bool GetIsCorrect()
+        {
+            return IsCorrect;
+        }
+        public void SetIsCorrect(bool isCorrect)
+        {
+            IsCorrect = isCorrect;
+        }
+        public string GetQuizID()
+        {
+            return QuizID;
+        }
+        public void SetQuizID(string quizID)
+        {
+            QuizID = quizID;
+        }
+        public ChoiceModel(string choiceID, string choiceText, bool isCorrect, string quizID)
+        {
+            ChoiceID = choiceID;
+            ChoiceText = choiceText;
+            IsCorrect = isCorrect;
+            QuizID = quizID;
+        }
+
+    }
+}
+
+```
+
+### Model\Courses\CoursesModel.cs
+```cs
+﻿namespace E_learning.Model.Courses
+{
+    public class CoursesModel
+    {
+        private string courseID { get; set; }
+        private string courseName { get; set; }
+        private decimal coursePrice { get; set; }
+        private string authorID { get; set; }
+
+        public string GetCourseID()
+        {
+            return courseID;
+        }
+        public void SetCourseID(string courseID)
+        {
+            this.courseID = courseID;
+        }
+        public string GetCourseName()
+        {
+            return courseName;
+        }
+        public void SetCourseName(string courseName)
+        {
+            this.courseName = courseName;
+        }
+        public decimal GetCoursePrice()
+        {
+            return coursePrice;
+        }
+        public void SetCoursePrice(decimal coursePrice)
+        {
+            this.coursePrice = coursePrice;
+        }
+        public string GetAuthorID()
+        {
+            return authorID;
+        }
+        public void SetAuthorID(string authorID)
+        {
+            this.authorID = authorID;
+        }
+        public CoursesModel(string courseID, string courseName, decimal coursePrice, string authorID)
+        {
+            this.courseID = courseID;
+            this.courseName = courseName;
+            this.coursePrice = coursePrice;
+            this.authorID = authorID;
+        }
+    }
+}
+
+```
+
+### Model\Courses\LessonModel.cs
+```cs
+﻿namespace E_learning.Model.Courses
+{
+    public class LessonModel
+    {
+        private string lessonID { get; set; }
+        private string lessonTitle { get; set; }
+        private string lessonURL { get; set; }
+        private string courseID { get; set; }
+
+        public string GetLessonID()
+        {
+            return lessonID;
+        }
+        public void SetLessonID(string lessonID)
+        {
+            this.lessonID = lessonID;
+        }
+
+        public string GetLessonTitle()
+        {
+            return lessonTitle;
+        }
+        public void SetLessonTitle(string lessonTitle)
+        {
+            this.lessonTitle = lessonTitle;
+        }
+        public string GetLessonURL()
+        {
+            return lessonURL;
+        }
+        public void SetLessonURL(string lessonURL)
+        {
+            this.lessonURL = lessonURL;
+        }
+        public string GetCourseID()
+        {
+            return courseID;
+        }
+        public void SetCourseID(string courseID)
+        {
+            this.courseID = courseID;
+        }
+        public LessonModel(string lessonID, string lessonTitle, string lessonURL, string courseID)
+        {
+            this.lessonID = lessonID;
+            this.lessonTitle = lessonTitle;
+            this.lessonURL = lessonURL;
+            this.courseID = courseID;
+        }
+    }
+}
+
+```
+
+### Model\Courses\QuizModel.cs
+```cs
+﻿namespace E_learning.Model.Courses
+{
+    public class QuizModel
+    {
+        private string quizID { get; set; }
+        private string quizTitle { get; set; }
+        private string courseID { get; set; }
+        public string getQuizID()
+        {
+            return quizID;
+        }
+        public void setQuizID(string quizID)
+        {
+            this.quizID = quizID;
+        }
+        public string getQuizTitle()
+        {
+            return quizTitle;
+        }
+        public void setQuizTitle(string quizTitle)
+        {
+            this.quizTitle = quizTitle;
+        }
+        public string getCourseID()
+        {
+            return courseID;
+        }
+        public void setCourseID(string courseID)
+        {
+            this.courseID = courseID;
+        }
+        public QuizModel(string quizID, string quizTitle, string courseID)
+        {
+            this.quizID = quizID;
+            this.quizTitle = quizTitle;
+            this.courseID = courseID;
+        }
+    }
+}
+
+```
+
+### Model\Users\UserModel.cs
+```cs
+﻿namespace E_learning.Model.Users
+{
+    public class UserModel
+    {
+        public string UserID { get; set; }
+        public string Username { get; set; }
+        public string Password { get; set; } 
+        public string Email { get; set; }
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+        public string UserRole { get; set; }
+    }
+}
+
+```
+
+### Repositories\AuthRepository.cs
+```cs
+﻿using E_learning.DAL.Auth;
+using E_learning.Model.Users;
+
+namespace E_learning.Repositories
+{
+    public class AuthRepository : IAuthRepository
+    {
+        private readonly AuthDAL _authDAL;
+
+        public AuthRepository(AuthDAL authDAL)
+        {
+            _authDAL = authDAL;
+        }
+
+        public Task<bool> AddUserAsync(UserModel user) => _authDAL.AddUserAsync(user);
+
+        public Task<bool> CheckUsernameExistsAsync(string username) => _authDAL.CheckUsernameExistsAsync(username);
+
+        public Task<UserModel> GetUserByUsernameAsync(string username) => _authDAL.GetUserByUsername(username);
+    }
+}
+
+```
+
+### Repositories\CourseRepository.cs
+```cs
+﻿using E_learning.DAL.Course;
+using E_learning.Model.Courses;
+
+namespace E_learning.Repositories
+{
+    public class CourseRepository : ICourseRepository
+    {
+         
+        private readonly CoursesDAL _coursesDAL;
+        private readonly LessonDAL _lessonDAL;
+        private readonly QuizDAL _quizDAL;
+        private readonly ChoiceDAL _choiceDAL;
+
+        public CourseRepository(
+            CoursesDAL coursesDAL,
+            LessonDAL lessonDAL,
+            QuizDAL quizDAL,
+            ChoiceDAL choiceDAL)
+        {
+            _coursesDAL = coursesDAL;
+            _lessonDAL = lessonDAL;
+            _quizDAL = quizDAL;
+            _choiceDAL = choiceDAL;
+        }
+        // Course methods
+        public Task<List<CoursesModel>> GetAllCourses() => _coursesDAL.getAllCourse();
+        public Task<CoursesModel> GetCourseByID(string courseID) => _coursesDAL.getCourseByID(courseID);
+        public Task<bool> InsertCourse(CoursesModel course) => _coursesDAL.InsertCourse(course);
+        public Task<bool> DeleteCourse(string courseID) => _coursesDAL.deleteCourse(courseID);
+        // Lesson methods
+        public Task<List<LessonModel>> GetLessonsByCourseID(string courseID) => _lessonDAL.GetLessonByCourseID(courseID);
+        public Task<bool> DeleteLessons(string lessionID) => _lessonDAL.deleteLesson(lessionID);
+        public Task<bool> InsertLesson(LessonModel lesson) => _lessonDAL.insertLesson(lesson);
+        // Quiz methods
+        public Task<List<QuizModel>> GetQuizzesByCourseID(string courseID) => _quizDAL.GetQuizByCourseID(courseID);
+        public Task<bool> DeleteQuiz(string quizID) => _quizDAL.DeleteQuiz(quizID);
+        public Task<bool> InsertQuiz(QuizModel quiz) => _quizDAL.insertQuiz(quiz);
+        // Choice methods
+        public Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID) => _choiceDAL.GetChoicesByQuizID(quizID);
+        public Task<bool> DeleteChoice(string choiceID) => _choiceDAL.deleteChoice(choiceID);
+        public Task<bool> InsertChoice(ChoiceModel choice) => _choiceDAL.InsertChoice(choice);
+    }
+}
+
+
+```
+
+### Repositories\IAuthRepository.cs
+```cs
+﻿using E_learning.Model.Users;
+
+namespace E_learning.Repositories
+{
+    public interface IAuthRepository
+    {
+        Task<UserModel> GetUserByUsernameAsync(string username);
+        Task<bool> CheckUsernameExistsAsync(string username);
+        Task<bool> AddUserAsync(UserModel user);
+    }
+}
+
+```
+
+### Repositories\ICourseRepository.cs
+```cs
+﻿using E_learning.Model.Courses;
+
+namespace E_learning.Repositories
+{
+    public interface ICourseRepository
+    {
+       
+            // Courses
+            Task<List<CoursesModel>> GetAllCourses();
+            Task<CoursesModel> GetCourseByID(string courseID);
+            Task<bool> InsertCourse(CoursesModel course);
+            Task<bool> DeleteCourse(string courseID);
+
+            // Lessons
+            Task<List<LessonModel>> GetLessonsByCourseID(string courseID);
+            Task<bool> DeleteLessons(string courseID);
+            Task<bool> InsertLesson(LessonModel lesson);
+    
+        // Quizzes
+            Task<List<QuizModel>> GetQuizzesByCourseID(string courseID);
+            Task<bool> DeleteQuiz(string quizID);
+            Task<bool> InsertQuiz(QuizModel quiz);
+        // Choices
+            Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID);
+            Task<bool> DeleteChoice(string choiceID);
+            Task<bool> InsertChoice(ChoiceModel choice);
+
+
+    }
+}
+
+```
+
+### Services\GenerateID.cs
+```cs
+﻿using System.Security.Cryptography;
+namespace E_learning.Services
+{
+    public class GenerateID
+    {
+        // automatically generate unique IDs for Course
+        public string generateID()
+        {
+            byte[] bytes = new byte[4];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(bytes);
+            }
+            int number = Math.Abs(BitConverter.ToInt32(bytes, 0)) % 1000000;
+            string numberString = number.ToString("D6");
+            return numberString;
+        }
+        public string generateCourseID() {
+            string numberString = generateID();
+            return $"CID{numberString}";
+        }
+        // automatically generate unique IDs for Lesson
+        public string generateLessonID() {
+            string numberString = generateID();
+            return $"LID{numberString}";
+        }
+        // automatically generate unique IDs for Quiz
+        public string generateQuizID() {
+            string numberString = generateID();
+            return $"QID{numberString}";
+        }
+        // automatically generate unique IDs for Choice
+        public string generateChoiceID() {
+            string numberString = generateID();
+            return $"CHID{numberString}";
+        }
+
+        public string generateUserID()
+        {
+            string numberString = generateID();
+            return $"UID{numberString}";
+        }
+    }
+}
+
+```

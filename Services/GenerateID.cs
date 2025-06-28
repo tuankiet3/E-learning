@@ -34,5 +34,11 @@ namespace E_learning.Services
             string numberString = generateID();
             return $"CHID{numberString}";
         }
+
+        public string generateUserID()
+        {
+            string numberString = generateID();
+            return $"UID{numberString}";
+        }
     }
 }
