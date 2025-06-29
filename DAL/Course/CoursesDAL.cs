@@ -16,7 +16,7 @@ namespace E_learning.DAL.Course
             _connectionString = connectionString;
             _logger = logger;
         }
-
+        // lấy toàn bộ khóa học`
         public async Task<List<CoursesModel>> getAllCourse()
         {
             List<CoursesModel> courses = new List<CoursesModel>();
@@ -49,7 +49,7 @@ namespace E_learning.DAL.Course
             }
             return courses;
         }
-
+        // Thêm khóa học mới
         public async Task<bool> InsertCourse(CoursesModel course)
         {
             try
@@ -75,7 +75,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // Xóa khóa học
         public async Task<bool> deleteCourse(string courseID)
         {
             try
@@ -98,7 +98,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // lấy khóa học theo ID
         public async Task<CoursesModel> getCourseByID(string courseID)
         {
             CoursesModel course = null;
@@ -129,6 +129,30 @@ namespace E_learning.DAL.Course
                 _logger.LogError(ex, "Error retrieving course by ID");
             }
             return course;
+        }
+
+        // Kiểm tra ID khóa học
+        public async Task<bool> CheckCourseIDExists(string courseID)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT COUNT(*) FROM Courses WHERE CourseID = @CourseID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@CourseID", courseID);
+                        int count = (int)await command.ExecuteScalarAsync();
+                        return count > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking if course ID exists");
+                return false;
+            }
         }
     }
 }

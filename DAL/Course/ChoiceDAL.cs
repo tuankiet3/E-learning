@@ -9,11 +9,13 @@ namespace E_learning.DAL.Course
     {
         private readonly string _connectionString;
         private readonly ILogger<ChoiceDAL> _logger;
+
         public ChoiceDAL(string connectionString, ILogger<ChoiceDAL> logger)
         {
             _connectionString = connectionString;
             _logger = logger;
         }
+        // lấy toàn bô choices theo quizID
         public async Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID)
         {
             List<ChoiceModel> choices = new List<ChoiceModel>();
@@ -46,7 +48,7 @@ namespace E_learning.DAL.Course
             }
             return choices;
         }
-        
+        // xóa một choice theo choiceID
         public async Task<bool> deleteChoice(string choiceID)
         {
             try
@@ -69,7 +71,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // thêm một choice mới
         public async Task<bool> InsertChoice(ChoiceModel choice)
         {
             try
@@ -94,6 +96,39 @@ namespace E_learning.DAL.Course
                 _logger.LogError(ex, "Error inserting choice");
                 return false;
             }
+        }
+        // lấy hết choices
+        public async Task<List<ChoiceModel>> getAllChoice()
+        {
+            List<ChoiceModel> choices = new List<ChoiceModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Choices";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string choiceID = reader.GetString(reader.GetOrdinal("ChoiceID"));
+                                string choiceText = reader.GetString(reader.GetOrdinal("ChoiceText"));
+                                bool isCorrect = reader.GetBoolean(reader.GetOrdinal("IsCorrect"));
+                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
+                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, quizID);
+                                choices.Add(choice);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all choices");
+            }
+            return choices;
         }
     }
 }

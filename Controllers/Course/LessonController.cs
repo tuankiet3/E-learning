@@ -5,9 +5,9 @@ using E_learning.DAL.Course;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using E_learning.DTO.Course;
-using E_learning.Repositories;
 using E_learning.Services;
-namespace E_learning.Controllers
+using E_learning.Repositories.Course;
+namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -16,11 +16,13 @@ namespace E_learning.Controllers
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
-        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        private readonly CheckExsistingID _checkExsistingID;
+        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID exsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
+            _checkExsistingID = exsistingID;
         }
         [HttpGet("GetLessonsByCourseID/{courseID}")]
         [ProducesResponseType(typeof(IEnumerable<LessonModel>), statusCode: 200)]
@@ -77,9 +79,13 @@ namespace E_learning.Controllers
             }
             try
             {
-                string lessonID = _generateID.generateLessonID();
+                string newID = await _checkExsistingID.GenerateUniqueID(
+                    _courseRepo.GetAllLessons,
+                    l => l.GetLessonID(),
+                    _generateID.generateLessonID
+                );
                 LessonModel lessonModel = new LessonModel(
-                    lessonID,
+                    newID,
                     lesson.lessonTitle,
                     lesson.lessonURL,
                     lesson.courseID
@@ -87,9 +93,9 @@ namespace E_learning.Controllers
                 bool isInserted = await _courseRepo.InsertLesson(lessonModel);
                 if (!isInserted)
                 {
-                    return StatusCode(500, "Error inserting lesson");
+                    return BadRequest("Failed to insert lesson");
                 }
-                return CreatedAtAction(nameof(GetLessonsByCourseID), new { courseID = lesson.courseID }, lessonModel);
+                return CreatedAtAction(nameof(GetLessonsByCourseID), new { lesson.courseID }, lessonModel);
             }
             catch (Exception ex)
             {

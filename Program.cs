@@ -5,14 +5,16 @@ using E_learning.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Microsoft.OpenApi.Models; // <-- THÊM USING NÀY
+using Microsoft.OpenApi.Models;
+using E_learning.Repositories.Course;
+using E_learning.Services.VNPay;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Lấy chuỗi kết nối
 var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection");
-
-
+// Đăng kí VNPayService
+builder.Services.AddScoped<VnPayService>();
 // Đăng ký các DAL
 builder.Services.AddSingleton(provider => new CoursesDAL(connectionString, provider.GetRequiredService<ILogger<CoursesDAL>>()));
 builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provider.GetRequiredService<ILogger<LessonDAL>>()));
@@ -24,7 +26,7 @@ builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
-builder.Services.AddScoped<GenerateID>(); // <-- Đã bỏ dòng bị lặp
+builder.Services.AddScoped<GenerateID>();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IZoomService, ZoomService>();

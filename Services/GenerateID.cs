@@ -40,5 +40,15 @@ namespace E_learning.Services
             string numberString = generateID();
             return $"UID{numberString}";
         }
+        public string GenerateEnrollmentID()
+        {
+            string numberString = generateID();
+            return $"ENID{numberString}";
+        }
+
+        public string generateStudentID() => $"SID{generateID()}";
+        public string generateLecturerID() => $"LEC{generateID()}";
+        public string generateAdminID() => $"ADID{generateID()}";
+
     }
 }

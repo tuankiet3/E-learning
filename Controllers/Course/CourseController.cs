@@ -5,9 +5,9 @@ using E_learning.DAL.Course;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using E_learning.DTO.Course;
-using E_learning.Repositories;
 using E_learning.Services;
-namespace E_learning.Controllers
+using E_learning.Repositories.Course;
+namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -16,12 +16,13 @@ namespace E_learning.Controllers
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
-
-        public CourseController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        private readonly CheckExsistingID _checkExsistingID;
+        public CourseController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID exsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
+            _checkExsistingID = exsistingID;
         }
 
         [HttpGet("GetAllCourses")]
@@ -58,9 +59,13 @@ namespace E_learning.Controllers
             }
             try
             {
-                string CourseID = _generateID.generateCourseID();
+                string newID = await _checkExsistingID.GenerateUniqueID(
+                    _courseRepo.GetAllCourses,
+                    c => c.GetCourseID(),
+                    _generateID.generateCourseID
+                );
                 CoursesModel courseModel = new CoursesModel(
-                    CourseID,
+                    newID,
                     course.CourseName,
                     course.CoursePrice,
                     course.Author
