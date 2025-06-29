@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace E_learning.DTO
+namespace E_learning.DTO.Auth
 {
     public class LoginDTO
     {

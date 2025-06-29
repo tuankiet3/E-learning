@@ -72,34 +72,53 @@ namespace E_learning.DAL.Auth
             }
         }
 
-        public async Task<bool> AddUserAsync(UserModel user)
+        public async Task AddUserAsync(UserModel user, SqlConnection connection, SqlTransaction transaction)
         {
-            try
-            {
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    await connection.OpenAsync();
-                    string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, UserRole) 
+            string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, UserRole) 
                              VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName, @UserRole)";
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        command.Parameters.AddWithValue("@UserID", user.UserID);
-                        command.Parameters.AddWithValue("@Username", user.Username);
-                        command.Parameters.AddWithValue("@Password", user.Password);
-                        command.Parameters.AddWithValue("@Email", user.Email);
-                        command.Parameters.AddWithValue("@FirstName", user.FirstName);
-                        command.Parameters.AddWithValue("@LastName", user.LastName);
-                        command.Parameters.AddWithValue("@UserRole", user.UserRole);
 
-                        int rowsAffected = await command.ExecuteNonQueryAsync();
-                        return rowsAffected > 0;
-                    }
-                }
-            }
-            catch (Exception ex)
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                _logger.LogError(ex, "Error adding new user: {Username}", user.Username);
-                return false;
+                command.Parameters.AddWithValue("@UserID", user.UserID);
+                command.Parameters.AddWithValue("@Username", user.Username);
+                command.Parameters.AddWithValue("@Password", user.Password);
+                command.Parameters.AddWithValue("@Email", user.Email);
+                command.Parameters.AddWithValue("@FirstName", user.FirstName);
+                command.Parameters.AddWithValue("@LastName", user.LastName);
+                command.Parameters.AddWithValue("@UserRole", user.UserRole);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task AddStudentAsync(string studentID, string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Students (StudentID, UserID) VALUES (@StudentID, @UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@StudentID", studentID);
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task AddLecturerAsync(string lecturerID, string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Lecturers (LecturerID, UserID) VALUES (@LecturerID, @UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@LecturerID", lecturerID);
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+        public async Task AddAdminAsync(string adminID, string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Admin (AdminID, UserID) VALUES (@AdminID, @UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@AdminID", adminID);
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
             }
         }
     }

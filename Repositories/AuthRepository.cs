@@ -10,6 +10,8 @@ namespace E_learning.Repositories
         public AuthRepository(AuthDAL authDAL)
         {
             _authDAL = authDAL;
+            _configuration = configuration;
+            _generateID = generateID;
         }
 
         public Task<bool> AddUserAsync(UserModel user) => _authDAL.AddUserAsync(user);

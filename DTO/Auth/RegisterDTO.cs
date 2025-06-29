@@ -1,6 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using E_learning.Enums;
+using System.ComponentModel.DataAnnotations;
 
-namespace E_learning.DTO
+namespace E_learning.DTO.Auth
 {
     public class RegisterDTO
     {
@@ -21,5 +22,9 @@ namespace E_learning.DTO
 
         [Required(ErrorMessage = "Last name is required")]
         public string LastName { get; set; }
+
+        [Required(ErrorMessage = "User role is required")]
+        [EnumDataType(typeof(UserRole), ErrorMessage = "Invalid User Role. Valid roles are Student, Lecturer, Admin.")]
+        public string UserRole { get; set; } = "Student";
     }
 }

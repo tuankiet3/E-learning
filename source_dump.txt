@@ -14,6 +14,7 @@ E-learning/
 │   ├── ChoiceController.cs
 │   ├── CourseController.cs
 │   ├── LessonController.cs
+│   ├── MeetingController.cs
 │   └── QuizController.cs
 ├── DAL/
 │   ├── Auth/
@@ -24,21 +25,27 @@ E-learning/
 │       ├── LessonDAL.cs
 │       └── QuizDAL.cs
 ├── DTO/
+│   ├── Auth/
+│   │   ├── LoginDTO.cs
+│   │   └── RegisterDTO.cs
 │   ├── Course/
 │   │   ├── ChoiceDTO.cs
 │   │   ├── CourseDTO.cs
 │   │   ├── LessonDTO.cs
 │   │   └── QuizDTO.cs
-│   ├── LoginDTO.cs
-│   └── RegisterDTO.cs
+│   └── Zoom/
+│       └── CreateMeetingDTO.cs
 ├── Model/
 │   ├── Courses/
 │   │   ├── ChoiceModel.cs
 │   │   ├── CoursesModel.cs
 │   │   ├── LessonModel.cs
 │   │   └── QuizModel.cs
-│   └── Users/
-│       └── UserModel.cs
+│   ├── Users/
+│   │   ├── UserModel.cs
+│   │   └── UserRole.cs
+│   └── Zoom/
+│       └── ZoomMeetingResponse.cs
 ├── Properties/
 │   └── launchSettings.json
 ├── Repositories/
@@ -47,11 +54,14 @@ E-learning/
 │   ├── IAuthRepository.cs
 │   └── ICourseRepository.cs
 ├── Services/
-│   └── GenerateID.cs
+│   ├── GenerateID.cs
+│   ├── IZoomService.cs
+│   └── ZoomService.cs
 ├── bin/
 ├── obj/
 ├── .gitignore
 ├── E-learning.csproj
+├── E-learning.csproj.Backup.tmp
 ├── E-learning.csproj.user
 ├── E-learning.http
 ├── E-learning.sln
@@ -71,6 +81,7 @@ using E_learning.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.OpenApi.Models; // <-- THÊM USING NÀY
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -88,7 +99,11 @@ builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider
 
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
-builder.Services.AddScoped<GenerateID>();
+builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<GenerateID>(); // <-- Đã bỏ dòng bị lặp
+builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IZoomService, ZoomService>();
 
 
 // === CẤU HÌNH JWT AUTHENTICATION ===
@@ -114,7 +129,38 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+// === THAY THẾ CẤU HÌNH SWAGGERGEN TẠI ĐÂY ===
+builder.Services.AddSwaggerGen(options =>
+{
+    // 1. Định nghĩa Security Scheme (cách xác thực)
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter 'Bearer' [space] and then your valid token in the text input below.\n\nExample: \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\""
+    });
+
+    // 2. Thêm Security Requirement (yêu cầu xác thực)
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+});
+// ============================================
 
 var app = builder.Build();
 
@@ -126,18 +172,18 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseAuthentication(); 
-app.UseAuthorization(); 
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
+
 ```
 
 ### Controllers\AuthController.cs
 ```cs
 ﻿using Microsoft.AspNetCore.Mvc;
-using E_learning.DTO;
 using E_learning.Model.Users;
 using E_learning.Repositories;
 using Microsoft.AspNetCore.Components;
@@ -147,6 +193,9 @@ using System.Security.Claims;
 using System.Text;
 using E_learning.Services;
 using Microsoft.AspNetCore.Authorization;
+
+using E_learning.Enums;
+using E_learning.DTO.Auth;
 
 namespace E_learning.Controllers
 {
@@ -158,10 +207,11 @@ namespace E_learning.Controllers
         private readonly IConfiguration _configuration;
         private readonly GenerateID _generateID;
 
-        public AuthController(IAuthRepository authRepo, IConfiguration configuration)
+        public AuthController(IAuthRepository authRepo, IConfiguration configuration, GenerateID generateID)
         {
             _authRepo = authRepo;
             _configuration = configuration;
+            _generateID = generateID;
         }
 
         [HttpPost("register")]
@@ -187,7 +237,12 @@ namespace E_learning.Controllers
                 FirstName = registerDto.FirstName,
                 LastName = registerDto.LastName,
                 Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
-                UserRole = "Student"
+                UserRole = registerDto.UserRole switch
+                {
+                    "Lecturer" => UserRole.Lecturer.ToString(),
+                    "Student" => UserRole.Student.ToString(),
+                    _ => throw new ArgumentException("Invalid user role")
+                }
             };
 
             var result = await _authRepo.AddUserAsync(user);
@@ -225,7 +280,7 @@ namespace E_learning.Controllers
                 new Claim(JwtRegisteredClaimNames.Sub, user.UserID),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(ClaimTypes.Role, user.UserRole)
+                new Claim(ClaimTypes.Role, user.UserRole.ToString())
             };
 
             var token = new JwtSecurityToken(
@@ -595,6 +650,54 @@ namespace E_learning.Controllers
             {
                 _logger.LogError(ex, "Error inserting lesson");
                 return StatusCode(500, "Internal server error");
+            }
+        }
+    }
+}
+
+```
+
+### Controllers\MeetingController.cs
+```cs
+﻿using E_learning.DTO.Zoom;
+using E_learning.Enums;
+using E_learning.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+
+namespace E_learning.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class MeetingController : ControllerBase
+    {
+        private readonly IZoomService _zoomService;
+
+        public MeetingController(IZoomService zoomService)
+        {
+            _zoomService = zoomService;
+        }
+
+        [HttpPost("create")]
+        public async Task<IActionResult> CreateZoomMeeting([FromBody] CreateMeetingDTO meetingDto)
+        {
+            try
+            {
+                // Lấy email của giảng viên đang đăng nhập từ token
+                var email = User.FindFirstValue(ClaimTypes.Email);
+                if (string.IsNullOrEmpty(email))
+                {
+                    return BadRequest("User email not found in token.");
+                }
+
+                var meetingResponse = await _zoomService.CreateMeetingAsync(meetingDto, email);
+                return Ok(meetingResponse);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"An error occurred: {ex.Message}");
             }
         }
     }
@@ -1263,11 +1366,11 @@ namespace E_learning.DAL.Course
 
 ```
 
-### DTO\LoginDTO.cs
+### DTO\Auth\LoginDTO.cs
 ```cs
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace E_learning.DTO
+namespace E_learning.DTO.Auth
 {
     public class LoginDTO
     {
@@ -1281,11 +1384,12 @@ namespace E_learning.DTO
 
 ```
 
-### DTO\RegisterDTO.cs
+### DTO\Auth\RegisterDTO.cs
 ```cs
-﻿using System.ComponentModel.DataAnnotations;
+﻿using E_learning.Enums;
+using System.ComponentModel.DataAnnotations;
 
-namespace E_learning.DTO
+namespace E_learning.DTO.Auth
 {
     public class RegisterDTO
     {
@@ -1306,6 +1410,9 @@ namespace E_learning.DTO
 
         [Required(ErrorMessage = "Last name is required")]
         public string LastName { get; set; }
+
+        [Required(ErrorMessage = "User role is required")]
+        public string UserRole { get; set; } = "Student";
     }
 }
 
@@ -1385,6 +1492,22 @@ namespace E_learning.DTO.Course
         public string QuizTitle { get; set; }
         [Required(ErrorMessage = "Course ID is required")]
         public string courseID { get; set; }
+    }
+}
+
+```
+
+### DTO\Zoom\CreateMeetingDTO.cs
+```cs
+﻿namespace E_learning.DTO.Zoom
+{
+    public class CreateMeetingDTO
+    {
+        public string Topic { get; set; }
+        public int Type { get; set; } = 2;
+        public string StartTime { get; set; }
+        public int Duration { get; set; }
+        public string Timezone { get; set; } = "Asia/Ho_Chi_Minh";
     }
 }
 
@@ -1619,6 +1742,37 @@ namespace E_learning.DTO.Course
 
 ```
 
+### Model\Users\UserRole.cs
+```cs
+﻿namespace E_learning.Enums
+{
+    public enum UserRole
+    {
+        Student,
+        Lecturer,
+        Admin
+    }
+}
+
+```
+
+### Model\Zoom\ZoomMeetingResponse.cs
+```cs
+﻿namespace E_learning.Model.Zoom
+{
+    public class ZoomMeetingResponse
+    {
+        public long Id { get; set; }
+        public string Topic { get; set; }
+        public string StartTime { get; set; }
+        public int Duration { get; set; }
+        public string JoinUrl { get; set; }
+        public string Password { get; set; }
+    }
+}
+
+```
+
 ### Repositories\AuthRepository.cs
 ```cs
 ﻿using E_learning.DAL.Auth;
@@ -1788,6 +1942,108 @@ namespace E_learning.Services
         {
             string numberString = generateID();
             return $"UID{numberString}";
+        }
+    }
+}
+
+```
+
+### Services\IZoomService.cs
+```cs
+﻿using E_learning.DTO.Zoom;
+using E_learning.Model.Zoom;
+
+namespace E_learning.Services
+{
+    public interface IZoomService
+    {
+        Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string lecturerEmail);
+    }
+}
+
+```
+
+### Services\ZoomService.cs
+```cs
+﻿using E_learning.DTO.Zoom;
+using E_learning.Model.Zoom;
+using Microsoft.Extensions.Caching.Memory;
+using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Text;
+
+namespace E_learning.Services
+{
+    public class ZoomService : IZoomService
+    {
+        private readonly IConfiguration _configuration;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IMemoryCache _memoryCache;
+
+        public ZoomService(IConfiguration configuration, IHttpClientFactory httpClientFactory, IMemoryCache memoryCache)
+        {
+            _configuration = configuration;
+            _httpClientFactory = httpClientFactory;
+            _memoryCache = memoryCache;
+        }
+
+        public async Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDTO, string email)
+        {
+            var accessToken = await GetZoomAccessTokenAsync();
+            var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var jsonContent = JsonSerializer.Serialize(meetingDTO, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            var response = await client.PostAsync($"https://api.zoom.us/v2/users/{email}/meetings", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                throw new Exception($"Failed to create Zoom meeting: {error}");
+            }
+
+            var responseString = await response.Content.ReadAsStringAsync();
+            var meetingResponse = JsonSerializer.Deserialize<ZoomMeetingResponse>(responseString, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+            return meetingResponse;
+        }
+
+        private async Task<string> GetZoomAccessTokenAsync()
+        {
+            const string cacheKey = "ZoomAccessToken";
+
+            if (_memoryCache.TryGetValue(cacheKey, out string accessToken))
+            {
+                return accessToken;
+            }
+            var clientId = _configuration["Zoom:ClientId"];
+            var clientSecret = _configuration["Zoom:ClientSecret"];
+            var accountId = _configuration["Zoom:AccountId"];
+
+            var client = _httpClientFactory.CreateClient();
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://zoom.us/oauth/token");
+
+            // Tạo Basic Authentication header
+            var authValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
+            request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                { "grant_type", "account_credentials" },
+                { "account_id", accountId }
+            });
+
+            var response = await client.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var tokenData = JsonDocument.Parse(responseBody).RootElement;
+            accessToken = tokenData.GetProperty("access_token").GetString();
+            var expiresIn = tokenData.GetProperty("expires_in").GetInt32();
+
+            // Lưu token vào cache, trừ đi 5 phút để đảm bảo an toàn
+            _memoryCache.Set(cacheKey, accessToken, TimeSpan.FromSeconds(expiresIn - 300));
+
+            return accessToken;
         }
     }
 }

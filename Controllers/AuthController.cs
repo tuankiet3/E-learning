@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using E_learning.DTO;
 using E_learning.Model.Users;
 using E_learning.Repositories;
 using Microsoft.AspNetCore.Components;
@@ -9,6 +8,9 @@ using System.Security.Claims;
 using System.Text;
 using E_learning.Services;
 using Microsoft.AspNetCore.Authorization;
+
+using E_learning.Enums;
+using E_learning.DTO.Auth;
 
 namespace E_learning.Controllers
 {
@@ -50,7 +52,12 @@ namespace E_learning.Controllers
                 FirstName = registerDto.FirstName,
                 LastName = registerDto.LastName,
                 Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
-                UserRole = "Student"
+                UserRole = registerDto.UserRole switch
+                {
+                    "Lecturer" => UserRole.Lecturer.ToString(),
+                    "Student" => UserRole.Student.ToString(),
+                    _ => throw new ArgumentException("Invalid user role")
+                }
             };
 
             var result = await _authRepo.AddUserAsync(user);
@@ -88,7 +95,7 @@ namespace E_learning.Controllers
                 new Claim(JwtRegisteredClaimNames.Sub, user.UserID),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(ClaimTypes.Role, user.UserRole)
+                new Claim(ClaimTypes.Role, user.UserRole.ToString())
             };
 
             var token = new JwtSecurityToken(
