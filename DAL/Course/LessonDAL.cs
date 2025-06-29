@@ -14,6 +14,7 @@ namespace E_learning.DAL.Course
             _connectionString = connectionString;
             _logger = logger;
         }
+        // Lấy toàn bộ bài học theo CourseID
         public async Task<List<LessonModel>> GetLessonByCourseID(string courseID)
         {
             List<LessonModel> lessons = new List<LessonModel>();
@@ -46,6 +47,7 @@ namespace E_learning.DAL.Course
             }
             return lessons;
         }
+        // Xóa một bài học theo LessonID
 
         public async Task<bool> deleteLesson(string lessonID)
         {
@@ -69,7 +71,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // Thêm một bài học mới
         public async Task<bool> insertLesson(LessonModel lesson)
         {
             try
@@ -94,6 +96,39 @@ namespace E_learning.DAL.Course
                 _logger.LogError(ex, "Error inserting lesson with ID: {LessonID}", lesson.GetLessonID());
                 return false;
             }
+        }
+        // lấy hết lesson
+        public async Task<List<LessonModel>> GetAllLessons()
+        {
+            List<LessonModel> lessons = new List<LessonModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Lessons";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string lessonID = reader.GetString(reader.GetOrdinal("LessonID"));
+                                string lessonTitle = reader.GetString(reader.GetOrdinal("LessonTitle"));
+                                string lessonURL = reader.GetString(reader.GetOrdinal("LessonURL"));
+                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
+                                LessonModel lesson = new LessonModel(lessonID, lessonTitle, lessonURL, courseID);
+                                lessons.Add(lesson);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all lessons");
+            }
+            return lessons;
         }
     }
 }

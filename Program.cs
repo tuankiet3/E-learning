@@ -5,13 +5,15 @@ using E_learning.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using E_learning.Repositories.Course;
+using E_learning.Services.VNPay;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Lấy chuỗi kết nối
 var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection");
-
-
+// Đăng kí VNPayService
+builder.Services.AddScoped<VnPayService>();
 // Đăng ký các DAL
 builder.Services.AddSingleton(provider => new CoursesDAL(connectionString, provider.GetRequiredService<ILogger<CoursesDAL>>()));
 builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provider.GetRequiredService<ILogger<LessonDAL>>()));

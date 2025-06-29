@@ -14,6 +14,7 @@ namespace E_learning.DAL.Course
             _connectionString = connectionString;
             _logger = logger;
         }
+        // Lấy toàn bộ quiz theo CourseID
         public async Task<List<QuizModel>> GetQuizByCourseID(string courseID)
         {
             List<QuizModel> quizzes = new List<QuizModel>();
@@ -45,7 +46,7 @@ namespace E_learning.DAL.Course
             }
             return quizzes;
         }
-
+        // Xóa một quiz theo QuizID
         public async Task<bool> DeleteQuiz(string quizID)
         {
             try
@@ -68,7 +69,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // Thêm một quiz mới
         public async Task<bool> insertQuiz(QuizModel quiz)
         {
             try
@@ -92,6 +93,38 @@ namespace E_learning.DAL.Course
                 _logger.LogError(ex, "Error inserting quiz: {QuizTitle}", quiz.getQuizTitle());
                 return false;
             }
+        }
+        // lấy hết Quiz
+        public async Task<List<QuizModel>> GetAllQuiz()
+        {
+            List<QuizModel> quizzes = new List<QuizModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Quiz";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
+                                string quizTitle = reader.GetString(reader.GetOrdinal("QuizTitle"));
+                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
+                                QuizModel quiz = new QuizModel(quizID, quizTitle, courseID);
+                                quizzes.Add(quiz);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all quizzes");
+            }
+            return quizzes;
         }
     }
 }

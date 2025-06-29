@@ -1,9 +1,9 @@
-﻿using E_learning.Repositories;
-using E_learning.Services;
+﻿using E_learning.Services;
 using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
 using E_learning.DTO.Course;
-namespace E_learning.Controllers
+using E_learning.Repositories.Course;
+namespace E_learning.Controllers.Course
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -12,11 +12,14 @@ namespace E_learning.Controllers
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
-        public QuizController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        private readonly CheckExsistingID _checkExsistingID;
+        public QuizController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID checkExsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
+            _checkExsistingID = checkExsistingID;
+
         }
 
         [HttpGet("GetQuizzesByCourseID/{courseID}")]
@@ -73,18 +76,19 @@ namespace E_learning.Controllers
             }
             try
             {
-                string quizID = _generateID.generateQuizID();
+                string newID = await _checkExsistingID.GenerateUniqueID(_courseRepo.GetAllQuiz, q => q.getQuizID(), _generateID.generateQuizID
+                );
                 QuizModel quizModel = new QuizModel(
-                    quizID,
+                    newID,
                     quiz.QuizTitle,
                     quiz.courseID
                 );
                 bool isInserted = await _courseRepo.InsertQuiz(quizModel);
                 if (!isInserted)
                 {
-                    return StatusCode(500, "Failed to insert quiz");
+                    return BadRequest("Failed to insert quiz");
                 }
-                return CreatedAtAction(nameof(GetQuizzesByCourseID), new { courseID = quiz.courseID }, quizModel);
+                return CreatedAtAction(nameof(GetQuizzesByCourseID), new { quiz.courseID }, quizModel);
             }
             catch (Exception ex)
             {

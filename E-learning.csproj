@@ -12,6 +12,15 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.2" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="VNPAY.NET" Version="8.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Controllers\Meeting\" />
+    <Folder Include="Controllers\Message\" />
+    <Folder Include="DAL\Meeting\" />
+    <Folder Include="DAL\Message\" />
+    <Folder Include="DAL\Payment\" />
   </ItemGroup>
 
 </Project>

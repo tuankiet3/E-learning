@@ -5,9 +5,9 @@ using E_learning.DAL.Course;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using E_learning.DTO.Course;
-using E_learning.Repositories;
 using E_learning.Services;
-namespace E_learning.Controllers
+using E_learning.Repositories.Course;
+namespace E_learning.Controllers.Course
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -16,12 +16,15 @@ namespace E_learning.Controllers
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
+        private readonly CheckExsistingID _checkExsistingID;
 
-        public ChoiceController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        public ChoiceController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID checkExsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
+            _checkExsistingID = checkExsistingID;
+
         }
 
         [HttpGet("GetChoicesByQuizID/{quizID}")]
@@ -80,9 +83,9 @@ namespace E_learning.Controllers
             }
             try
             {
-                string choiceID = _generateID.generateChoiceID();
+                string newID = await _checkExsistingID.GenerateUniqueID(_courseRepo.getAllChoice, c => c.GetChoiceID(), _generateID.generateChoiceID);
                 ChoiceModel choiceModel = new ChoiceModel(
-                    choiceID,
+                    newID,
                     choice.ChoiceText,
                     choice.IsCorrect,
                     choice.QuizID
@@ -90,7 +93,7 @@ namespace E_learning.Controllers
                 bool isInserted = await _courseRepo.InsertChoice(choiceModel);
                 if (!isInserted)
                 {
-                    return StatusCode(500, "Error inserting choice");
+                    return BadRequest("Failed to insert choice");
                 }
                 return CreatedAtAction(nameof(GetChoicesByQuizID), new { quizID = choice.QuizID }, choiceModel);
             }
