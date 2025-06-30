@@ -1,4 +1,4 @@
-﻿using E_learning.Model.Payment;
+﻿using E_learning.DTO.Payment;
 
 namespace E_learning.Services.VNPay
 {
@@ -10,13 +10,16 @@ namespace E_learning.Services.VNPay
         {
             _configuration = configuration;
         }
-        public string CreatePaymentUrl(PaymentRequestModel model, HttpContext context)
+        public string CreatePaymentUrl(PaymentRequestDTO model, HttpContext context, string courseID)
         {
             var timeZoneById = TimeZoneInfo.FindSystemTimeZoneById(_configuration["TimeZoneId"]);
             var timeNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZoneById);
             var tick = DateTime.Now.Ticks.ToString();
             var pay = new VnPayLibrary();
+
+
             var urlCallBack = _configuration["Vnpay:PaymentBackReturnUrl"];
+            urlCallBack += $"?courseId={courseID}";
             var expireDate = timeNow.AddMinutes(15).ToString("yyyyMMddHHmmss");
             pay.AddRequestData("vnp_Version", _configuration["Vnpay:Version"]);
             pay.AddRequestData("vnp_Command", _configuration["Vnpay:Command"]);
@@ -26,21 +29,20 @@ namespace E_learning.Services.VNPay
             pay.AddRequestData("vnp_CurrCode", _configuration["Vnpay:CurrCode"]);
             pay.AddRequestData("vnp_IpAddr", pay.GetIpAddress(context));
             pay.AddRequestData("vnp_Locale", _configuration["Vnpay:Locale"]);
-            pay.AddRequestData("vnp_OrderInfo", $"{model.Name}|{model.OrderDescription}|{model.Amount}");
+            pay.AddRequestData("vnp_OrderInfo", $"{model.Name}|{model.OrderDescription}-{model.Amount}");
             pay.AddRequestData("vnp_OrderType", model.OrderType);
             pay.AddRequestData("vnp_ReturnUrl", urlCallBack);
             pay.AddRequestData("vnp_TxnRef", tick);
             pay.AddRequestData("vnp_ExpireDate", expireDate);
 
-            var paymentUrl =
-                pay.CreateRequestUrl(_configuration["Vnpay:BaseUrl"], _configuration["Vnpay:HashSecret"]);
+            var paymentUrl = pay.CreateRequestUrl(_configuration["Vnpay:BaseUrl"], _configuration["Vnpay:HashSecret"]);
             Console.WriteLine("Payment URL: " + paymentUrl);
 
             return paymentUrl;
         }
 
 
-        public PaymentResponseModel PaymentExecute(IQueryCollection collections)
+        public PaymentResponseDTO PaymentExecute(IQueryCollection collections)
         {
             var pay = new VnPayLibrary();
             var response = pay.GetFullResponseData(collections, _configuration["Vnpay:HashSecret"]);

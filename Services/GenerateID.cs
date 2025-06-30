@@ -45,6 +45,11 @@ namespace E_learning.Services
             string numberString = generateID();
             return $"ENID{numberString}";
         }
+        public string GeneratePaymentID()
+        {
+            string numberString = generateID();
+            return $"PID{numberString}";
+        }
 
     }
 }

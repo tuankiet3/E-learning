@@ -7,6 +7,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using E_learning.Repositories.Course;
 using E_learning.Services.VNPay;
+using E_learning.Repositories.Payment;
+using E_learning.Repositories.Enrollment;
+using E_learning.DAL.Payment;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,13 +23,16 @@ builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provid
 builder.Services.AddSingleton(provider => new QuizDAL(connectionString, provider.GetRequiredService<ILogger<QuizDAL>>()));
 builder.Services.AddSingleton(provider => new ChoiceDAL(connectionString, provider.GetRequiredService<ILogger<ChoiceDAL>>()));
 builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider.GetRequiredService<ILogger<AuthDAL>>()));
+builder.Services.AddSingleton(provider => new PaymentDAL(connectionString, provider.GetRequiredService<ILogger<PaymentDAL>>()));
 
 
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+//builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<GenerateID>();
-builder.Services.AddScoped<GenerateID>();
+builder.Services.AddScoped<CheckExsistingID>();
 
 
 // === CẤU HÌNH JWT AUTHENTICATION ===

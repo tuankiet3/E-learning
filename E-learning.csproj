@@ -20,7 +20,6 @@
     <Folder Include="Controllers\Message\" />
     <Folder Include="DAL\Meeting\" />
     <Folder Include="DAL\Message\" />
-    <Folder Include="DAL\Payment\" />
   </ItemGroup>
 
 </Project>
