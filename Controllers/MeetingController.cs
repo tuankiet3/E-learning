@@ -24,7 +24,6 @@ namespace E_learning.Controllers
         {
             try
             {
-                // Lấy email của giảng viên đang đăng nhập từ token
                 var email = User.FindFirstValue(ClaimTypes.Email);
                 if (string.IsNullOrEmpty(email))
                 {

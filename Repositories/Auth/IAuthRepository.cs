@@ -1,6 +1,6 @@
 ﻿using E_learning.Model.Users;
 
-namespace E_learning.Repositories
+namespace E_learning.Repositories.Auth
 {
     public interface IAuthRepository
     {

@@ -10,20 +10,27 @@ E-learning/
 ├── .github/
 ├── .vs/
 ├── Controllers/
+│   ├── Course/
+│   │   ├── ChoiceController.cs
+│   │   ├── CourseController.cs
+│   │   ├── LessonController.cs
+│   │   └── QuizController.cs
+│   ├── Enrollment/
+│   │   └── EnrollmentController.cs
+│   ├── Payment/
+│   │   └── PaymentController.cs
 │   ├── AuthController.cs
-│   ├── ChoiceController.cs
-│   ├── CourseController.cs
-│   ├── LessonController.cs
-│   ├── MeetingController.cs
-│   └── QuizController.cs
+│   └── MeetingController.cs
 ├── DAL/
 │   ├── Auth/
 │   │   └── AuthDAL.cs
-│   └── Course/
-│       ├── ChoiceDAL.cs
-│       ├── CoursesDAL.cs
-│       ├── LessonDAL.cs
-│       └── QuizDAL.cs
+│   ├── Course/
+│   │   ├── ChoiceDAL.cs
+│   │   ├── CoursesDAL.cs
+│   │   ├── LessonDAL.cs
+│   │   └── QuizDAL.cs
+│   └── Enrollment/
+│       └── EnrollmentDAL.cs
 ├── DTO/
 │   ├── Auth/
 │   │   ├── LoginDTO.cs
@@ -33,6 +40,8 @@ E-learning/
 │   │   ├── CourseDTO.cs
 │   │   ├── LessonDTO.cs
 │   │   └── QuizDTO.cs
+│   ├── Enrollment/
+│   │   └── EnrollmentDTO.cs
 │   └── Zoom/
 │       └── CreateMeetingDTO.cs
 ├── Model/
@@ -41,6 +50,15 @@ E-learning/
 │   │   ├── CoursesModel.cs
 │   │   ├── LessonModel.cs
 │   │   └── QuizModel.cs
+│   ├── Enrollment/
+│   │   └── EnrollmentModel.cs
+│   ├── Meeting/
+│   │   └── MeetingModel.cs
+│   ├── Message/
+│   │   └── MessageModel.cs
+│   ├── Payment/
+│   │   ├── PaymentRequestModel.cs
+│   │   └── PaymentResponseModel.cs
 │   ├── Users/
 │   │   ├── UserModel.cs
 │   │   └── UserRole.cs
@@ -49,11 +67,20 @@ E-learning/
 ├── Properties/
 │   └── launchSettings.json
 ├── Repositories/
-│   ├── AuthRepository.cs
-│   ├── CourseRepository.cs
-│   ├── IAuthRepository.cs
-│   └── ICourseRepository.cs
+│   ├── Auth/
+│   │   ├── AuthRepository.cs
+│   │   └── IAuthRepository.cs
+│   ├── Course/
+│   │   ├── CourseRepository.cs
+│   │   └── ICourseRepository.cs
+│   └── Enrollment/
+│       ├── EnrollmentRepository.cs
+│       └── IEnrollmentRepository.cs
 ├── Services/
+│   ├── VNPay/
+│   │   ├── VnPayLibrary.cs
+│   │   └── VnPayService.cs
+│   ├── CheckExsistingID.cs
 │   ├── GenerateID.cs
 │   ├── IZoomService.cs
 │   └── ZoomService.cs
@@ -74,21 +101,23 @@ E-learning/
 
 ### Program.cs
 ```cs
-﻿using E_learning.Repositories;
-using E_learning.DAL.Course;
+﻿using E_learning.DAL.Course;
 using E_learning.DAL.Auth;
 using E_learning.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Microsoft.OpenApi.Models; // <-- THÊM USING NÀY
+using Microsoft.OpenApi.Models;
+using E_learning.Repositories.Course;
+using E_learning.Services.VNPay;
+using E_learning.Repositories.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Lấy chuỗi kết nối
 var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection");
-
-
+// Đăng kí VNPayService
+builder.Services.AddScoped<VnPayService>();
 // Đăng ký các DAL
 builder.Services.AddSingleton(provider => new CoursesDAL(connectionString, provider.GetRequiredService<ILogger<CoursesDAL>>()));
 builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provider.GetRequiredService<ILogger<LessonDAL>>()));
@@ -100,7 +129,7 @@ builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
-builder.Services.AddScoped<GenerateID>(); // <-- Đã bỏ dòng bị lặp
+builder.Services.AddScoped<GenerateID>();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IZoomService, ZoomService>();
@@ -185,25 +214,23 @@ app.Run();
 ```cs
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Users;
-using E_learning.Repositories;
-using Microsoft.AspNetCore.Components;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using E_learning.Services;
 using Microsoft.AspNetCore.Authorization;
-
 using E_learning.Enums;
 using E_learning.DTO.Auth;
+using E_learning.Repositories.Auth;
 
 namespace E_learning.Controllers
 {
     [ApiController]
-    [Microsoft.AspNetCore.Mvc.Route("api/[controller]")]
+    [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly IAuthRepository _authRepo ;
+        private readonly IAuthRepository _authRepo;
         private readonly IConfiguration _configuration;
         private readonly GenerateID _generateID;
 
@@ -215,12 +242,17 @@ namespace E_learning.Controllers
         }
 
         [HttpPost("register")]
-        [AllowAnonymous] 
+        [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] RegisterDTO registerDto)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
+            }
+
+            if (!Enum.TryParse<UserRole>(registerDto.UserRole, true, out var userRoleEnum))
+            {
+                return BadRequest(new { Message = "Invalid user role provided. Valid roles are: Student, Lecturer, Admin." });
             }
 
             var userExists = await _authRepo.CheckUsernameExistsAsync(registerDto.Username);
@@ -237,12 +269,7 @@ namespace E_learning.Controllers
                 FirstName = registerDto.FirstName,
                 LastName = registerDto.LastName,
                 Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
-                UserRole = registerDto.UserRole switch
-                {
-                    "Lecturer" => UserRole.Lecturer.ToString(),
-                    "Student" => UserRole.Student.ToString(),
-                    _ => throw new ArgumentException("Invalid user role")
-                }
+                UserRole = userRoleEnum
             };
 
             var result = await _authRepo.AddUserAsync(user);
@@ -267,7 +294,7 @@ namespace E_learning.Controllers
 
             var token = GenerateJwtToken(user);
 
-            return Ok(new { token = token });
+            return Ok(new { token });
         }
 
         private string GenerateJwtToken(UserModel user)
@@ -297,7 +324,54 @@ namespace E_learning.Controllers
 
 ```
 
-### Controllers\ChoiceController.cs
+### Controllers\MeetingController.cs
+```cs
+﻿using E_learning.DTO.Zoom;
+using E_learning.Enums;
+using E_learning.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+
+namespace E_learning.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class MeetingController : ControllerBase
+    {
+        private readonly IZoomService _zoomService;
+
+        public MeetingController(IZoomService zoomService)
+        {
+            _zoomService = zoomService;
+        }
+
+        [HttpPost("create")]
+        public async Task<IActionResult> CreateZoomMeeting([FromBody] CreateMeetingDTO meetingDto)
+        {
+            try
+            {
+                var email = User.FindFirstValue(ClaimTypes.Email);
+                if (string.IsNullOrEmpty(email))
+                {
+                    return BadRequest("User email not found in token.");
+                }
+
+                var meetingResponse = await _zoomService.CreateMeetingAsync(meetingDto, email);
+                return Ok(meetingResponse);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"An error occurred: {ex.Message}");
+            }
+        }
+    }
+}
+
+```
+
+### Controllers\Course\ChoiceController.cs
 ```cs
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
@@ -306,9 +380,9 @@ using E_learning.DAL.Course;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using E_learning.DTO.Course;
-using E_learning.Repositories;
 using E_learning.Services;
-namespace E_learning.Controllers
+using E_learning.Repositories.Course;
+namespace E_learning.Controllers.Course
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -317,12 +391,15 @@ namespace E_learning.Controllers
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
+        private readonly CheckExsistingID _checkExsistingID;
 
-        public ChoiceController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        public ChoiceController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID checkExsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
+            _checkExsistingID = checkExsistingID;
+
         }
 
         [HttpGet("GetChoicesByQuizID/{quizID}")]
@@ -381,9 +458,9 @@ namespace E_learning.Controllers
             }
             try
             {
-                string choiceID = _generateID.generateChoiceID();
+                string newID = await _checkExsistingID.GenerateUniqueID(_courseRepo.getAllChoice, c => c.GetChoiceID(), _generateID.generateChoiceID);
                 ChoiceModel choiceModel = new ChoiceModel(
-                    choiceID,
+                    newID,
                     choice.ChoiceText,
                     choice.IsCorrect,
                     choice.QuizID
@@ -391,7 +468,7 @@ namespace E_learning.Controllers
                 bool isInserted = await _courseRepo.InsertChoice(choiceModel);
                 if (!isInserted)
                 {
-                    return StatusCode(500, "Error inserting choice");
+                    return BadRequest("Failed to insert choice");
                 }
                 return CreatedAtAction(nameof(GetChoicesByQuizID), new { quizID = choice.QuizID }, choiceModel);
             }
@@ -406,7 +483,7 @@ namespace E_learning.Controllers
 
 ```
 
-### Controllers\CourseController.cs
+### Controllers\Course\CourseController.cs
 ```cs
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
@@ -415,9 +492,9 @@ using E_learning.DAL.Course;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using E_learning.DTO.Course;
-using E_learning.Repositories;
 using E_learning.Services;
-namespace E_learning.Controllers
+using E_learning.Repositories.Course;
+namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -426,12 +503,13 @@ namespace E_learning.Controllers
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
-
-        public CourseController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        private readonly CheckExsistingID _checkExsistingID;
+        public CourseController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID exsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
+            _checkExsistingID = exsistingID;
         }
 
         [HttpGet("GetAllCourses")]
@@ -468,9 +546,13 @@ namespace E_learning.Controllers
             }
             try
             {
-                string CourseID = _generateID.generateCourseID();
+                string newID = await _checkExsistingID.GenerateUniqueID(
+                    _courseRepo.GetAllCourses,
+                    c => c.GetCourseID(),
+                    _generateID.generateCourseID
+                );
                 CoursesModel courseModel = new CoursesModel(
-                    CourseID,
+                    newID,
                     course.CourseName,
                     course.CoursePrice,
                     course.Author
@@ -551,7 +633,7 @@ namespace E_learning.Controllers
 
 ```
 
-### Controllers\LessonController.cs
+### Controllers\Course\LessonController.cs
 ```cs
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
@@ -560,9 +642,9 @@ using E_learning.DAL.Course;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using E_learning.DTO.Course;
-using E_learning.Repositories;
 using E_learning.Services;
-namespace E_learning.Controllers
+using E_learning.Repositories.Course;
+namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -571,11 +653,13 @@ namespace E_learning.Controllers
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
-        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        private readonly CheckExsistingID _checkExsistingID;
+        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID exsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
+            _checkExsistingID = exsistingID;
         }
         [HttpGet("GetLessonsByCourseID/{courseID}")]
         [ProducesResponseType(typeof(IEnumerable<LessonModel>), statusCode: 200)]
@@ -632,9 +716,13 @@ namespace E_learning.Controllers
             }
             try
             {
-                string lessonID = _generateID.generateLessonID();
+                string newID = await _checkExsistingID.GenerateUniqueID(
+                    _courseRepo.GetAllLessons,
+                    l => l.GetLessonID(),
+                    _generateID.generateLessonID
+                );
                 LessonModel lessonModel = new LessonModel(
-                    lessonID,
+                    newID,
                     lesson.lessonTitle,
                     lesson.lessonURL,
                     lesson.courseID
@@ -642,9 +730,9 @@ namespace E_learning.Controllers
                 bool isInserted = await _courseRepo.InsertLesson(lessonModel);
                 if (!isInserted)
                 {
-                    return StatusCode(500, "Error inserting lesson");
+                    return BadRequest("Failed to insert lesson");
                 }
-                return CreatedAtAction(nameof(GetLessonsByCourseID), new { courseID = lesson.courseID }, lessonModel);
+                return CreatedAtAction(nameof(GetLessonsByCourseID), new { lesson.courseID }, lessonModel);
             }
             catch (Exception ex)
             {
@@ -657,62 +745,14 @@ namespace E_learning.Controllers
 
 ```
 
-### Controllers\MeetingController.cs
+### Controllers\Course\QuizController.cs
 ```cs
-﻿using E_learning.DTO.Zoom;
-using E_learning.Enums;
-using E_learning.Services;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
-
-namespace E_learning.Controllers
-{
-    [ApiController]
-    [Route("api/[controller]")]
-    [Authorize]
-    public class MeetingController : ControllerBase
-    {
-        private readonly IZoomService _zoomService;
-
-        public MeetingController(IZoomService zoomService)
-        {
-            _zoomService = zoomService;
-        }
-
-        [HttpPost("create")]
-        public async Task<IActionResult> CreateZoomMeeting([FromBody] CreateMeetingDTO meetingDto)
-        {
-            try
-            {
-                // Lấy email của giảng viên đang đăng nhập từ token
-                var email = User.FindFirstValue(ClaimTypes.Email);
-                if (string.IsNullOrEmpty(email))
-                {
-                    return BadRequest("User email not found in token.");
-                }
-
-                var meetingResponse = await _zoomService.CreateMeetingAsync(meetingDto, email);
-                return Ok(meetingResponse);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"An error occurred: {ex.Message}");
-            }
-        }
-    }
-}
-
-```
-
-### Controllers\QuizController.cs
-```cs
-﻿using E_learning.Repositories;
-using E_learning.Services;
+﻿using E_learning.Services;
 using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
 using E_learning.DTO.Course;
-namespace E_learning.Controllers
+using E_learning.Repositories.Course;
+namespace E_learning.Controllers.Course
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -721,11 +761,14 @@ namespace E_learning.Controllers
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
-        public QuizController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID)
+        private readonly CheckExsistingID _checkExsistingID;
+        public QuizController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID checkExsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
+            _checkExsistingID = checkExsistingID;
+
         }
 
         [HttpGet("GetQuizzesByCourseID/{courseID}")]
@@ -782,18 +825,19 @@ namespace E_learning.Controllers
             }
             try
             {
-                string quizID = _generateID.generateQuizID();
+                string newID = await _checkExsistingID.GenerateUniqueID(_courseRepo.GetAllQuiz, q => q.getQuizID(), _generateID.generateQuizID
+                );
                 QuizModel quizModel = new QuizModel(
-                    quizID,
+                    newID,
                     quiz.QuizTitle,
                     quiz.courseID
                 );
                 bool isInserted = await _courseRepo.InsertQuiz(quizModel);
                 if (!isInserted)
                 {
-                    return StatusCode(500, "Failed to insert quiz");
+                    return BadRequest("Failed to insert quiz");
                 }
-                return CreatedAtAction(nameof(GetQuizzesByCourseID), new { courseID = quiz.courseID }, quizModel);
+                return CreatedAtAction(nameof(GetQuizzesByCourseID), new { quiz.courseID }, quizModel);
             }
             catch (Exception ex)
             {
@@ -806,9 +850,185 @@ namespace E_learning.Controllers
 
 ```
 
+### Controllers\Enrollment\EnrollmentController.cs
+```cs
+﻿using E_learning.DTO.Enrollment;
+using E_learning.Model.Courses;
+using E_learning.Model.Enrollment;
+using E_learning.Repositories.Enrollment;
+using E_learning.Services;
+using Microsoft.AspNetCore.Mvc;
+
+namespace E_learning.Controllers.Enrollment
+{
+    [ApiController]
+    [Route("api/[controller]")]
+   
+    public class EnrollmentController : ControllerBase
+    {
+        private readonly ILogger<EnrollmentController> _logger;
+        private readonly IEnrollmentRepository _enrollmentRepo;
+        private readonly GenerateID _generateID;
+        private readonly CheckExsistingID _checkExsistingID;
+        public EnrollmentController(ILogger<EnrollmentController> logger, IEnrollmentRepository enrollmentRepo, GenerateID generateID, CheckExsistingID checkExsistingID)
+        {
+            _logger = logger;
+            _enrollmentRepo = enrollmentRepo;
+            _generateID = generateID;
+            _checkExsistingID = checkExsistingID;
+        }
+        [HttpGet("GetAllEnrollments")]
+        [ProducesResponseType(typeof(IEnumerable<EnrollmentModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetAllEnrollments()
+        {
+            try
+            {
+                var enrollments = await _enrollmentRepo.GetAllEnrollments();
+                if (enrollments == null || !enrollments.Any())
+                {
+                    return NotFound("No enrollments found");
+                }
+                return Ok(enrollments);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all enrollments");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpPost("InsertEnrollment")]
+        [ProducesResponseType(typeof(EnrollmentModel), statusCode: 201)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> InsertEnrollment([FromBody] EnrollmentDTO enrollment)
+        {
+            if (enrollment == null)
+            {
+                return BadRequest("Enrollment data is null");
+            }
+            try
+            {
+                string newID = await _checkExsistingID.GenerateUniqueID(_enrollmentRepo.GetAllEnrollments,e => e.GetEnrollmentID(), _generateID.GenerateEnrollmentID);
+                EnrollmentModel enrollmen = new EnrollmentModel(
+                    newID,
+                    enrollment.UserID,
+                    enrollment.CourseID
+                    );
+                bool isInsert = await _enrollmentRepo.InsertEnrollment(enrollmen);
+                if (!isInsert)
+                {
+                    return BadRequest("Enrollment could not be inserted");
+                }
+                return CreatedAtAction(nameof(GetAllEnrollments), new { id = newID }, enrollmen);
+
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting enrollment");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("GetEnrollmentsByUserID/{userID}")]
+        [ProducesResponseType(typeof(IEnumerable<EnrollmentModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetEnrollmentsByUserID(string userID)
+        {
+            try
+            {
+                var enrollments = await _enrollmentRepo.getEnrollbyUserID(userID);
+                if (enrollments == null || !enrollments.Any())
+                {
+                    return NotFound("No enrollments found for the specified user ID");
+                }
+                return Ok(enrollments);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving enrollments for user ID: {UserID}", userID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+    }
+}
+
+```
+
+### Controllers\Payment\PaymentController.cs
+```cs
+﻿using E_learning.Model.Payment;
+using E_learning.Services.VNPay;
+using Microsoft.AspNetCore.Mvc;
+
+namespace E_learning.Controllers.Payment
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class PaymentController : ControllerBase
+    {
+        private readonly VnPayService _vnPayService;
+
+        public PaymentController(VnPayService vnPayService)
+        {
+            _vnPayService = vnPayService;
+        }
+
+        [HttpPost("create")]
+        public IActionResult Create([FromBody] PaymentRequestModel model)
+        {
+            if (model == null || model.Amount <= 0)
+                return BadRequest("Invalid payment information.");
+
+            try
+            {
+                var paymentUrl = _vnPayService.CreatePaymentUrl(model, HttpContext);
+
+                return Ok(new
+                {
+                    success = true,
+                    paymentUrl
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("vnpay-return")]
+        public IActionResult VNPayReturn()
+        {
+            var response = _vnPayService.PaymentExecute(HttpContext.Request.Query);
+            Console.WriteLine("Response: " + response.OrderInfo);
+
+            if (response.Success)
+            {
+               
+                return Redirect("https://localhost:7173/swagger/index.html");
+            }
+            else
+            {
+               
+                return Redirect("https://localhost:7188/swagger/payment-failed");
+            }
+        }
+    }
+}
+```
+
 ### DAL\Auth\AuthDAL.cs
 ```cs
-﻿using E_learning.Model.Users;
+﻿using E_learning.Enums;
+using E_learning.Model.Users;
 using Microsoft.Data.SqlClient;
 
 namespace E_learning.DAL.Auth
@@ -840,13 +1060,17 @@ namespace E_learning.DAL.Auth
                         {
                             if (await reader.ReadAsync())
                             {
+                                Enum.TryParse<UserRole>(reader.GetString(reader.GetOrdinal("UserRole")), true, out var role);
+
                                 user = new UserModel
                                 {
                                     UserID = reader.GetString(reader.GetOrdinal("UserID")),
                                     Username = reader.GetString(reader.GetOrdinal("Username")),
-                                    Password = reader.GetString(reader.GetOrdinal("Password")), 
+                                    Password = reader.GetString(reader.GetOrdinal("Password")),
                                     Email = reader.GetString(reader.GetOrdinal("Email")),
-                                    UserRole = reader.GetString(reader.GetOrdinal("UserRole"))
+                                    FirstName = reader.GetString(reader.GetOrdinal("FirstName")),
+                                    LastName = reader.GetString(reader.GetOrdinal("LastName")),
+                                    UserRole = role
                                 };
                             }
                         }
@@ -882,34 +1106,54 @@ namespace E_learning.DAL.Auth
             }
         }
 
-        public async Task<bool> AddUserAsync(UserModel user)
+        public async Task AddUserAsync(UserModel user, SqlConnection connection, SqlTransaction transaction)
         {
-            try
-            {
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    await connection.OpenAsync();
-                    string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, UserRole) 
+            string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, UserRole) 
                              VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName, @UserRole)";
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        command.Parameters.AddWithValue("@UserID", user.UserID);
-                        command.Parameters.AddWithValue("@Username", user.Username);
-                        command.Parameters.AddWithValue("@Password", user.Password);
-                        command.Parameters.AddWithValue("@Email", user.Email);
-                        command.Parameters.AddWithValue("@FirstName", user.FirstName);
-                        command.Parameters.AddWithValue("@LastName", user.LastName);
-                        command.Parameters.AddWithValue("@UserRole", user.UserRole);
 
-                        int rowsAffected = await command.ExecuteNonQueryAsync();
-                        return rowsAffected > 0;
-                    }
-                }
-            }
-            catch (Exception ex)
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                _logger.LogError(ex, "Error adding new user: {Username}", user.Username);
-                return false;
+                command.Parameters.AddWithValue("@UserID", user.UserID);
+                command.Parameters.AddWithValue("@Username", user.Username);
+                command.Parameters.AddWithValue("@Password", user.Password);
+                command.Parameters.AddWithValue("@Email", user.Email);
+                command.Parameters.AddWithValue("@FirstName", user.FirstName);
+                command.Parameters.AddWithValue("@LastName", user.LastName);
+                // THAY ĐỔI: Chuyển enum thành chuỗi để lưu vào DB
+                command.Parameters.AddWithValue("@UserRole", user.UserRole.ToString());
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task AddStudentAsync(string studentID, string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Students (StudentID, UserID) VALUES (@StudentID, @UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@StudentID", studentID);
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task AddLecturerAsync(string lecturerID, string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Lecturers (LecturerID, UserID) VALUES (@LecturerID, @UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@LecturerID", lecturerID);
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+        public async Task AddAdminAsync(string adminID, string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Admin (AdminID, UserID) VALUES (@AdminID, @UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@AdminID", adminID);
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
             }
         }
     }
@@ -930,11 +1174,13 @@ namespace E_learning.DAL.Course
     {
         private readonly string _connectionString;
         private readonly ILogger<ChoiceDAL> _logger;
+
         public ChoiceDAL(string connectionString, ILogger<ChoiceDAL> logger)
         {
             _connectionString = connectionString;
             _logger = logger;
         }
+        // lấy toàn bô choices theo quizID
         public async Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID)
         {
             List<ChoiceModel> choices = new List<ChoiceModel>();
@@ -967,7 +1213,7 @@ namespace E_learning.DAL.Course
             }
             return choices;
         }
-        
+        // xóa một choice theo choiceID
         public async Task<bool> deleteChoice(string choiceID)
         {
             try
@@ -990,7 +1236,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // thêm một choice mới
         public async Task<bool> InsertChoice(ChoiceModel choice)
         {
             try
@@ -1015,6 +1261,39 @@ namespace E_learning.DAL.Course
                 _logger.LogError(ex, "Error inserting choice");
                 return false;
             }
+        }
+        // lấy hết choices
+        public async Task<List<ChoiceModel>> getAllChoice()
+        {
+            List<ChoiceModel> choices = new List<ChoiceModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Choices";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string choiceID = reader.GetString(reader.GetOrdinal("ChoiceID"));
+                                string choiceText = reader.GetString(reader.GetOrdinal("ChoiceText"));
+                                bool isCorrect = reader.GetBoolean(reader.GetOrdinal("IsCorrect"));
+                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
+                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, quizID);
+                                choices.Add(choice);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all choices");
+            }
+            return choices;
         }
     }
 }
@@ -1041,7 +1320,7 @@ namespace E_learning.DAL.Course
             _connectionString = connectionString;
             _logger = logger;
         }
-
+        // lấy toàn bộ khóa học`
         public async Task<List<CoursesModel>> getAllCourse()
         {
             List<CoursesModel> courses = new List<CoursesModel>();
@@ -1074,7 +1353,7 @@ namespace E_learning.DAL.Course
             }
             return courses;
         }
-
+        // Thêm khóa học mới
         public async Task<bool> InsertCourse(CoursesModel course)
         {
             try
@@ -1100,7 +1379,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // Xóa khóa học
         public async Task<bool> deleteCourse(string courseID)
         {
             try
@@ -1123,7 +1402,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // lấy khóa học theo ID
         public async Task<CoursesModel> getCourseByID(string courseID)
         {
             CoursesModel course = null;
@@ -1155,6 +1434,30 @@ namespace E_learning.DAL.Course
             }
             return course;
         }
+
+        // Kiểm tra ID khóa học
+        public async Task<bool> CheckCourseIDExists(string courseID)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT COUNT(*) FROM Courses WHERE CourseID = @CourseID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@CourseID", courseID);
+                        int count = (int)await command.ExecuteScalarAsync();
+                        return count > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking if course ID exists");
+                return false;
+            }
+        }
     }
 }
 
@@ -1178,6 +1481,7 @@ namespace E_learning.DAL.Course
             _connectionString = connectionString;
             _logger = logger;
         }
+        // Lấy toàn bộ bài học theo CourseID
         public async Task<List<LessonModel>> GetLessonByCourseID(string courseID)
         {
             List<LessonModel> lessons = new List<LessonModel>();
@@ -1210,6 +1514,7 @@ namespace E_learning.DAL.Course
             }
             return lessons;
         }
+        // Xóa một bài học theo LessonID
 
         public async Task<bool> deleteLesson(string lessonID)
         {
@@ -1233,7 +1538,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // Thêm một bài học mới
         public async Task<bool> insertLesson(LessonModel lesson)
         {
             try
@@ -1259,6 +1564,39 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
+        // lấy hết lesson
+        public async Task<List<LessonModel>> GetAllLessons()
+        {
+            List<LessonModel> lessons = new List<LessonModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Lessons";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string lessonID = reader.GetString(reader.GetOrdinal("LessonID"));
+                                string lessonTitle = reader.GetString(reader.GetOrdinal("LessonTitle"));
+                                string lessonURL = reader.GetString(reader.GetOrdinal("LessonURL"));
+                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
+                                LessonModel lesson = new LessonModel(lessonID, lessonTitle, lessonURL, courseID);
+                                lessons.Add(lesson);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all lessons");
+            }
+            return lessons;
+        }
     }
 }
 
@@ -1282,6 +1620,7 @@ namespace E_learning.DAL.Course
             _connectionString = connectionString;
             _logger = logger;
         }
+        // Lấy toàn bộ quiz theo CourseID
         public async Task<List<QuizModel>> GetQuizByCourseID(string courseID)
         {
             List<QuizModel> quizzes = new List<QuizModel>();
@@ -1313,7 +1652,7 @@ namespace E_learning.DAL.Course
             }
             return quizzes;
         }
-
+        // Xóa một quiz theo QuizID
         public async Task<bool> DeleteQuiz(string quizID)
         {
             try
@@ -1336,7 +1675,7 @@ namespace E_learning.DAL.Course
                 return false;
             }
         }
-
+        // Thêm một quiz mới
         public async Task<bool> insertQuiz(QuizModel quiz)
         {
             try
@@ -1360,6 +1699,147 @@ namespace E_learning.DAL.Course
                 _logger.LogError(ex, "Error inserting quiz: {QuizTitle}", quiz.getQuizTitle());
                 return false;
             }
+        }
+        // lấy hết Quiz
+        public async Task<List<QuizModel>> GetAllQuiz()
+        {
+            List<QuizModel> quizzes = new List<QuizModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Quiz";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
+                                string quizTitle = reader.GetString(reader.GetOrdinal("QuizTitle"));
+                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
+                                QuizModel quiz = new QuizModel(quizID, quizTitle, courseID);
+                                quizzes.Add(quiz);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all quizzes");
+            }
+            return quizzes;
+        }
+    }
+}
+
+```
+
+### DAL\Enrollment\EnrollmentDAL.cs
+```cs
+﻿using E_learning.Model.Enrollment;
+using Microsoft.Data.SqlClient;
+namespace E_learning.DAL.Enrollment
+{
+    public class EnrollmentDAL
+    {
+        private readonly string _connectionString;
+        private readonly ILogger<EnrollmentDAL> _logger;
+        public EnrollmentDAL(string connectionString, ILogger<EnrollmentDAL> logger)
+        {
+            _connectionString = connectionString;
+            _logger = logger;
+        }
+        public async Task<bool> InsertEnrollment(EnrollmentModel Enroll)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Enrollment (EnrollmentID, UserID, CourseID) VALUES (@EnrollmentID, @UserID, @CourseID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@EnrollmentID", Enroll.GetEnrollmentID);
+                        command.Parameters.AddWithValue("@UserID", Enroll.GetUserID);
+                        command.Parameters.AddWithValue("@CourseID", Enroll.GetCourseID);
+                   
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting enrollment for UserID: {UserID}, CourseID: {CourseID}", Enroll.GetUserID, Enroll.GetCourseID);
+                return false;
+            }
+        }
+
+        public async Task<List<EnrollmentModel>> GetAllEnrollments()
+        {
+            List<EnrollmentModel> enrollments = new List<EnrollmentModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Enrollment";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string enrollmentID = reader.GetString(reader.GetOrdinal("EnrollmentID"));
+                                string userID = reader.GetString(reader.GetOrdinal("UserID"));
+                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
+                                EnrollmentModel enrollment = new EnrollmentModel(enrollmentID, userID, courseID);
+                                enrollments.Add(enrollment);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving enrollments");
+            }
+            return enrollments;
+        }
+
+        public async Task<List<EnrollmentModel>> getEnrollbyUserID(string userID)
+        {
+            List<EnrollmentModel> enrollments = new List<EnrollmentModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Enrollment WHERE UserID = @UserID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@UserID", userID);
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string enrollmentID = reader.GetString(reader.GetOrdinal("EnrollmentID"));
+                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
+                                EnrollmentModel enrollment = new EnrollmentModel(enrollmentID, userID, courseID);
+                                enrollments.Add(enrollment);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving enrollments for UserID: {UserID}", userID);
+            }
+            return enrollments;
         }
     }
 }
@@ -1412,6 +1892,7 @@ namespace E_learning.DTO.Auth
         public string LastName { get; set; }
 
         [Required(ErrorMessage = "User role is required")]
+        [EnumDataType(typeof(UserRole), ErrorMessage = "Invalid User Role. Valid roles are Student, Lecturer, Admin.")]
         public string UserRole { get; set; } = "Student";
     }
 }
@@ -1492,6 +1973,20 @@ namespace E_learning.DTO.Course
         public string QuizTitle { get; set; }
         [Required(ErrorMessage = "Course ID is required")]
         public string courseID { get; set; }
+    }
+}
+
+```
+
+### DTO\Enrollment\EnrollmentDTO.cs
+```cs
+﻿namespace E_learning.DTO.Enrollment
+{
+    public class EnrollmentDTO
+    {
+        public string UserID { get; set; }
+        public string CourseID { get; set; }
+      
     }
 }
 
@@ -1724,9 +2219,113 @@ namespace E_learning.DTO.Course
 
 ```
 
+### Model\Enrollment\EnrollmentModel.cs
+```cs
+﻿namespace E_learning.Model.Enrollment
+{
+    public class EnrollmentModel
+    {
+        private string enrollmenID { get; set; }
+        private string userID { get; set; }
+        private string courseID { get; set; }
+
+        public string GetEnrollmentID()
+        {
+            return enrollmenID;
+        }
+        public void SetEnrollmentID(string enrollmentID)
+        {
+            this.enrollmenID = enrollmentID;
+        }
+        public string GetUserID()
+        {
+            return userID;
+        }
+        public void SetUserID(string userID)
+        {
+            this.userID = userID;
+        }
+        public string GetCourseID()
+        {
+            return courseID;
+        }
+        public void SetCourseID(string courseID)
+        {
+            this.courseID = courseID;
+        }
+        public EnrollmentModel(string enrollmentID, string userID, string courseID)
+        {
+            this.enrollmenID = enrollmentID;
+            this.userID = userID;
+            this.courseID = courseID;
+        }
+    }
+}
+
+```
+
+### Model\Meeting\MeetingModel.cs
+```cs
+﻿namespace E_learning.Model.Meeting
+{
+    public class MeetingModel
+    {
+    }
+}
+
+```
+
+### Model\Message\MessageModel.cs
+```cs
+﻿namespace E_learning.Model.Message
+{
+    public class MessageModel
+    {
+    }
+}
+
+```
+
+### Model\Payment\PaymentRequestModel.cs
+```cs
+﻿namespace E_learning.Model.Payment
+{
+    public class PaymentRequestModel
+    {
+        public string OrderType { get; set; } = "other";
+        public double Amount { get; set; }
+        public string OrderDescription { get; set; }
+        public string Name { get; set; }
+    }
+}
+
+```
+
+### Model\Payment\PaymentResponseModel.cs
+```cs
+﻿namespace E_learning.Model.Payment
+{
+    public class PaymentResponseModel
+    {
+        public string OrderInfo { get; set; }
+        public string TransactionId { get; set; }
+        public string OrderId { get; set; }
+        public string PaymentMethod { get; set; }
+        public string PaymentId { get; set; }
+        public bool Success { get; set; }
+        public string Token { get; set; }
+        public string VnPayResponseCode { get; set; }
+        public string Message { get; set; } // Add this line
+    }
+}
+
+```
+
 ### Model\Users\UserModel.cs
 ```cs
-﻿namespace E_learning.Model.Users
+﻿using E_learning.Enums;
+
+namespace E_learning.Model.Users
 {
     public class UserModel
     {
@@ -1736,7 +2335,7 @@ namespace E_learning.DTO.Course
         public string Email { get; set; }
         public string FirstName { get; set; }
         public string LastName { get; set; }
-        public string UserRole { get; set; }
+        public UserRole UserRole { get; set; }
     }
 }
 
@@ -1773,23 +2372,69 @@ namespace E_learning.DTO.Course
 
 ```
 
-### Repositories\AuthRepository.cs
+### Repositories\Auth\AuthRepository.cs
 ```cs
 ﻿using E_learning.DAL.Auth;
+using E_learning.Enums;
 using E_learning.Model.Users;
+using E_learning.Services;
+using Microsoft.Data.SqlClient;
 
-namespace E_learning.Repositories
+namespace E_learning.Repositories.Auth
 {
     public class AuthRepository : IAuthRepository
     {
         private readonly AuthDAL _authDAL;
+        private readonly IConfiguration _configuration;
+        private readonly GenerateID _generateID;
 
-        public AuthRepository(AuthDAL authDAL)
+        public AuthRepository(AuthDAL authDAL, IConfiguration configuration, GenerateID generateID)
         {
             _authDAL = authDAL;
+            _configuration = configuration;
+            _generateID = generateID;
         }
 
-        public Task<bool> AddUserAsync(UserModel user) => _authDAL.AddUserAsync(user);
+        public async Task<bool> AddUserAsync(UserModel user)
+        {
+            string connectionString = _configuration.GetConnectionString("SqlServerConnection");
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                await connection.OpenAsync();
+                using (SqlTransaction transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        await _authDAL.AddUserAsync(user, connection, transaction);
+
+                        switch (user.UserRole)
+                        {
+                            case UserRole.Student:
+                                string studentID = _generateID.generateStudentID();
+                                await _authDAL.AddStudentAsync(studentID, user.UserID, connection, transaction);
+                                break;
+                            case UserRole.Lecturer:
+                                string lecturerID = _generateID.generateLecturerID();
+                                await _authDAL.AddLecturerAsync(lecturerID, user.UserID, connection, transaction);
+                                break;
+                            case UserRole.Admin:
+                                string adminID = _generateID.generateAdminID();
+                                await _authDAL.AddAdminAsync(adminID, user.UserID, connection, transaction);
+                                break;
+                            default:
+                                throw new Exception($"Invalid user role for database insertion: {user.UserRole}");
+                        }
+                        await transaction.CommitAsync();
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        await transaction.RollbackAsync();
+                        return false;
+                    }
+                }
+            }
+        }
 
         public Task<bool> CheckUsernameExistsAsync(string username) => _authDAL.CheckUsernameExistsAsync(username);
 
@@ -1799,12 +2444,28 @@ namespace E_learning.Repositories
 
 ```
 
-### Repositories\CourseRepository.cs
+### Repositories\Auth\IAuthRepository.cs
+```cs
+﻿using E_learning.Model.Users;
+
+namespace E_learning.Repositories.Auth
+{
+    public interface IAuthRepository
+    {
+        Task<UserModel> GetUserByUsernameAsync(string username);
+        Task<bool> CheckUsernameExistsAsync(string username);
+        Task<bool> AddUserAsync(UserModel user);
+    }
+}
+
+```
+
+### Repositories\Course\CourseRepository.cs
 ```cs
 ﻿using E_learning.DAL.Course;
 using E_learning.Model.Courses;
 
-namespace E_learning.Repositories
+namespace E_learning.Repositories.Course
 {
     public class CourseRepository : ICourseRepository
     {
@@ -1830,45 +2491,33 @@ namespace E_learning.Repositories
         public Task<CoursesModel> GetCourseByID(string courseID) => _coursesDAL.getCourseByID(courseID);
         public Task<bool> InsertCourse(CoursesModel course) => _coursesDAL.InsertCourse(course);
         public Task<bool> DeleteCourse(string courseID) => _coursesDAL.deleteCourse(courseID);
+       
         // Lesson methods
         public Task<List<LessonModel>> GetLessonsByCourseID(string courseID) => _lessonDAL.GetLessonByCourseID(courseID);
         public Task<bool> DeleteLessons(string lessionID) => _lessonDAL.deleteLesson(lessionID);
         public Task<bool> InsertLesson(LessonModel lesson) => _lessonDAL.insertLesson(lesson);
+        public Task<List<LessonModel>> GetAllLessons() => _lessonDAL.GetAllLessons();
         // Quiz methods
         public Task<List<QuizModel>> GetQuizzesByCourseID(string courseID) => _quizDAL.GetQuizByCourseID(courseID);
         public Task<bool> DeleteQuiz(string quizID) => _quizDAL.DeleteQuiz(quizID);
         public Task<bool> InsertQuiz(QuizModel quiz) => _quizDAL.insertQuiz(quiz);
+        public Task<List<QuizModel>> GetAllQuiz() => _quizDAL.GetAllQuiz();
         // Choice methods
         public Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID) => _choiceDAL.GetChoicesByQuizID(quizID);
         public Task<bool> DeleteChoice(string choiceID) => _choiceDAL.deleteChoice(choiceID);
         public Task<bool> InsertChoice(ChoiceModel choice) => _choiceDAL.InsertChoice(choice);
+        public Task<List<ChoiceModel>> getAllChoice() => _choiceDAL.getAllChoice();
     }
 }
 
 
 ```
 
-### Repositories\IAuthRepository.cs
-```cs
-﻿using E_learning.Model.Users;
-
-namespace E_learning.Repositories
-{
-    public interface IAuthRepository
-    {
-        Task<UserModel> GetUserByUsernameAsync(string username);
-        Task<bool> CheckUsernameExistsAsync(string username);
-        Task<bool> AddUserAsync(UserModel user);
-    }
-}
-
-```
-
-### Repositories\ICourseRepository.cs
+### Repositories\Course\ICourseRepository.cs
 ```cs
 ﻿using E_learning.Model.Courses;
 
-namespace E_learning.Repositories
+namespace E_learning.Repositories.Course
 {
     public interface ICourseRepository
     {
@@ -1878,22 +2527,90 @@ namespace E_learning.Repositories
             Task<CoursesModel> GetCourseByID(string courseID);
             Task<bool> InsertCourse(CoursesModel course);
             Task<bool> DeleteCourse(string courseID);
+       
 
-            // Lessons
+        // Lessons
             Task<List<LessonModel>> GetLessonsByCourseID(string courseID);
             Task<bool> DeleteLessons(string courseID);
             Task<bool> InsertLesson(LessonModel lesson);
-    
+            Task<List<LessonModel>> GetAllLessons();
+
         // Quizzes
-            Task<List<QuizModel>> GetQuizzesByCourseID(string courseID);
+        Task<List<QuizModel>> GetQuizzesByCourseID(string courseID);
             Task<bool> DeleteQuiz(string quizID);
             Task<bool> InsertQuiz(QuizModel quiz);
+            Task<List<QuizModel>> GetAllQuiz();
         // Choices
-            Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID);
+        Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID);
             Task<bool> DeleteChoice(string choiceID);
             Task<bool> InsertChoice(ChoiceModel choice);
+            Task<List<ChoiceModel>> getAllChoice();
 
+    }
+}
 
+```
+
+### Repositories\Enrollment\EnrollmentRepository.cs
+```cs
+﻿using E_learning.DAL.Enrollment;
+using E_learning.Model.Enrollment;
+
+namespace E_learning.Repositories.Enrollment
+{
+    public class EnrollmentRepository : IEnrollmentRepository
+    {
+        private readonly EnrollmentDAL _enrollmentDAL;
+        public EnrollmentRepository(EnrollmentDAL enrollmentDAL)
+        {
+            _enrollmentDAL = enrollmentDAL;
+        }
+        public Task<bool> InsertEnrollment(EnrollmentModel enrollment) => _enrollmentDAL.InsertEnrollment(enrollment);
+        public Task<List<EnrollmentModel>> GetAllEnrollments() => _enrollmentDAL.GetAllEnrollments();
+        public Task<List<EnrollmentModel>> getEnrollbyUserID(string userID) => _enrollmentDAL.getEnrollbyUserID(userID);
+    }
+}
+
+```
+
+### Repositories\Enrollment\IEnrollmentRepository.cs
+```cs
+﻿using E_learning.Model.Enrollment;
+
+namespace E_learning.Repositories.Enrollment
+{
+    public interface IEnrollmentRepository
+    {
+        Task<List<EnrollmentModel>> getEnrollbyUserID(string userID);
+        Task<bool> InsertEnrollment(EnrollmentModel enrollment);
+        Task<List<EnrollmentModel>> GetAllEnrollments();
+    }
+}
+
+```
+
+### Services\CheckExsistingID.cs
+```cs
+﻿namespace E_learning.Services
+{
+    public class CheckExsistingID
+    {
+        public async Task<string> GenerateUniqueID<TModel>(Func<Task<List<TModel>>> getAllFunc,Func<TModel, string> getIDFunc, Func<string> generateIDFunc)
+        {
+            var existingModels = await getAllFunc();
+            var existingIDs = existingModels
+                .Select(getIDFunc)
+                .ToHashSet();
+
+            string newID;
+            do
+            {
+                newID = generateIDFunc();
+            }
+            while (existingIDs.Contains(newID));
+
+            return newID;
+        }
     }
 }
 
@@ -1943,6 +2660,16 @@ namespace E_learning.Services
             string numberString = generateID();
             return $"UID{numberString}";
         }
+        public string GenerateEnrollmentID()
+        {
+            string numberString = generateID();
+            return $"ENID{numberString}";
+        }
+
+        public string generateStudentID() => $"SID{generateID()}";
+        public string generateLecturerID() => $"LEC{generateID()}";
+        public string generateAdminID() => $"ADID{generateID()}";
+
     }
 }
 
@@ -1969,8 +2696,8 @@ namespace E_learning.Services
 using E_learning.Model.Zoom;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net.Http.Headers;
-using System.Text.Json;
 using System.Text;
+using System.Text.Json;
 
 namespace E_learning.Services
 {
@@ -1987,19 +2714,38 @@ namespace E_learning.Services
             _memoryCache = memoryCache;
         }
 
-        public async Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDTO, string email)
+        public async Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string email)
         {
             var accessToken = await GetZoomAccessTokenAsync();
             var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            var jsonContent = JsonSerializer.Serialize(meetingDTO, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+            var meetingObject = new
+            {
+                topic = meetingDto.Topic,
+                type = meetingDto.Type,
+                start_time = meetingDto.StartTime,
+                duration = meetingDto.Duration,
+                timezone = meetingDto.Timezone,
+                settings = new
+                {
+                    join_before_host = true,
+                    mute_upon_entry = true,
+                    participant_video = true,
+                    host_video = true,
+                    auto_recording = "none"
+                }
+            };
+
+            var jsonContent = JsonSerializer.Serialize(meetingObject);
             var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
             var response = await client.PostAsync($"https://api.zoom.us/v2/users/{email}/meetings", content);
 
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync();
-                throw new Exception($"Failed to create Zoom meeting: {error}");
+                throw new Exception($"Failed to create Zoom meeting. Zoom API returned: {response.StatusCode} - {error}");
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
@@ -2016,6 +2762,7 @@ namespace E_learning.Services
             {
                 return accessToken;
             }
+
             var clientId = _configuration["Zoom:ClientId"];
             var clientSecret = _configuration["Zoom:ClientSecret"];
             var accountId = _configuration["Zoom:AccountId"];
@@ -2023,7 +2770,6 @@ namespace E_learning.Services
             var client = _httpClientFactory.CreateClient();
             var request = new HttpRequestMessage(HttpMethod.Post, "https://zoom.us/oauth/token");
 
-            // Tạo Basic Authentication header
             var authValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
             request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -2040,10 +2786,256 @@ namespace E_learning.Services
             accessToken = tokenData.GetProperty("access_token").GetString();
             var expiresIn = tokenData.GetProperty("expires_in").GetInt32();
 
-            // Lưu token vào cache, trừ đi 5 phút để đảm bảo an toàn
             _memoryCache.Set(cacheKey, accessToken, TimeSpan.FromSeconds(expiresIn - 300));
 
             return accessToken;
+        }
+    }
+}
+
+```
+
+### Services\VNPay\VnPayLibrary.cs
+```cs
+﻿using E_learning.Model.Payment;
+using System.Globalization;
+using System.Net.Sockets;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace E_learning.Services.VNPay
+{
+    public class VnPayLibrary
+    {
+        private readonly SortedList<string, string> _requestData = new SortedList<string, string>(new VnPayCompare());
+        private readonly SortedList<string, string> _responseData = new SortedList<string, string>(new VnPayCompare());
+
+
+        public PaymentResponseModel GetFullResponseData(IQueryCollection collection, string hashSecret)
+        {
+            var vnPay = new VnPayLibrary();
+            foreach (var (key, value) in collection)
+            {
+                if (!string.IsNullOrEmpty(key) && key.StartsWith("vnp_"))
+                {
+                    vnPay.AddResponseData(key, value);
+                }
+            }
+            var orderId = Convert.ToInt64(vnPay.GetResponseData("vnp_TxnRef"));
+            var vnPayTranId = Convert.ToInt64(vnPay.GetResponseData("vnp_TransactionNo"));
+            var vnpResponseCode = vnPay.GetResponseData("vnp_ResponseCode");
+            var vnpSecureHash =
+                collection.FirstOrDefault(k => k.Key == "vnp_SecureHash").Value; //hash của dữ liệu trả về
+            var orderInfo = vnPay.GetResponseData("vnp_OrderInfo");
+            var checkSignature =
+                vnPay.ValidateSignature(vnpSecureHash, hashSecret); //check Signature
+            if (!checkSignature)
+                return new PaymentResponseModel()
+                {
+                    Success = false
+                };
+            var isSuccess = vnpResponseCode == "00";
+            return new PaymentResponseModel()
+            {
+                Success = isSuccess,
+                PaymentMethod = "VnPay",
+                OrderInfo = orderInfo,
+                OrderId = orderId.ToString(),
+                PaymentId = vnPayTranId.ToString(),
+                TransactionId = vnPayTranId.ToString(),
+                Token = vnpSecureHash,
+                VnPayResponseCode = vnpResponseCode
+            };
+        }
+        public string GetIpAddress(HttpContext context)
+        {
+            var ipAddress = string.Empty;
+            try
+            {
+                var remoteIpAddress = context.Connection.RemoteIpAddress;
+
+                if (remoteIpAddress != null)
+                {
+                    if (remoteIpAddress.AddressFamily == AddressFamily.InterNetworkV6)
+                    {
+                        remoteIpAddress = Dns.GetHostEntry(remoteIpAddress).AddressList
+                            .FirstOrDefault(x => x.AddressFamily == AddressFamily.InterNetwork);
+                    }
+
+                    if (remoteIpAddress != null) ipAddress = remoteIpAddress.ToString();
+
+                    return ipAddress;
+                }
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+
+            return "127.0.0.1";
+        }
+
+        public void AddRequestData(string key, string value)
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                _requestData.Add(key, value);
+            }
+        }
+
+        public void AddResponseData(string key, string value)
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                _responseData.Add(key, value);
+            }
+        }
+        public string GetResponseData(string key)
+        {
+            return _responseData.TryGetValue(key, out var retValue) ? retValue : string.Empty;
+        }
+        public string CreateRequestUrl(string baseUrl, string vnpHashSecret)
+        {
+            var data = new StringBuilder();
+
+            foreach (var (key, value) in _requestData.Where(kv => !string.IsNullOrEmpty(kv.Value)))
+            {
+                data.Append(WebUtility.UrlEncode(key) + "=" + WebUtility.UrlEncode(value) + "&");
+            }
+
+            var querystring = data.ToString();
+            Console.WriteLine("Query String: " + querystring);
+            baseUrl += "?" + querystring;
+            var signData = querystring;
+            if (signData.Length > 0)
+            {
+                signData = signData.Remove(data.Length - 1, 1);
+            }
+            Console.WriteLine("Sign Data: " + signData);
+
+            var vnpSecureHash = HmacSha512(vnpHashSecret, signData);
+            baseUrl += "vnp_SecureHash=" + vnpSecureHash;
+            return baseUrl;
+
+        }
+
+        public bool ValidateSignature(string inputHash, string secretKey)
+        {
+            var rspRaw = GetResponseData();
+            var myChecksum = HmacSha512(secretKey, rspRaw);
+            return myChecksum.Equals(inputHash, StringComparison.InvariantCultureIgnoreCase);
+        }
+        private string HmacSha512(string key, string inputData)
+        {
+            var hash = new StringBuilder();
+            var keyBytes = Encoding.UTF8.GetBytes(key);
+            var inputBytes = Encoding.UTF8.GetBytes(inputData);
+            using (var hmac = new HMACSHA512(keyBytes))
+            {
+                var hashValue = hmac.ComputeHash(inputBytes);
+                foreach (var theByte in hashValue)
+                {
+                    hash.Append(theByte.ToString("x2"));
+                }
+            }
+
+            return hash.ToString();
+        }
+
+        private string GetResponseData()
+        {
+            var data = new StringBuilder();
+            if (_responseData.ContainsKey("vnp_SecureHashType"))
+            {
+                _responseData.Remove("vnp_SecureHashType");
+            }
+
+            if (_responseData.ContainsKey("vnp_SecureHash"))
+            {
+                _responseData.Remove("vnp_SecureHash");
+            }
+
+            foreach (var (key, value) in _responseData.Where(kv => !string.IsNullOrEmpty(kv.Value)))
+            {
+                data.Append(WebUtility.UrlEncode(key) + "=" + WebUtility.UrlEncode(value) + "&");
+            }
+
+            //remove last '&'
+            if (data.Length > 0)
+            {
+                data.Remove(data.Length - 1, 1);
+            }
+
+            return data.ToString();
+        }
+    }
+
+    public class VnPayCompare : IComparer<string>
+    {
+        public int Compare(string x, string y)
+        {
+            if (x == y) return 0;
+            if (x == null) return -1;
+            if (y == null) return 1;
+            var vnpCompare = CompareInfo.GetCompareInfo("en-US");
+            return vnpCompare.Compare(x, y, CompareOptions.Ordinal);
+        }
+    }
+}
+
+```
+
+### Services\VNPay\VnPayService.cs
+```cs
+﻿using E_learning.Model.Payment;
+
+namespace E_learning.Services.VNPay
+{
+    public class VnPayService
+    {
+        private readonly IConfiguration _configuration;
+
+        public VnPayService(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+        public string CreatePaymentUrl(PaymentRequestModel model, HttpContext context)
+        {
+            var timeZoneById = TimeZoneInfo.FindSystemTimeZoneById(_configuration["TimeZoneId"]);
+            var timeNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZoneById);
+            var tick = DateTime.Now.Ticks.ToString();
+            var pay = new VnPayLibrary();
+            var urlCallBack = _configuration["Vnpay:PaymentBackReturnUrl"];
+            var expireDate = timeNow.AddMinutes(15).ToString("yyyyMMddHHmmss");
+            pay.AddRequestData("vnp_Version", _configuration["Vnpay:Version"]);
+            pay.AddRequestData("vnp_Command", _configuration["Vnpay:Command"]);
+            pay.AddRequestData("vnp_TmnCode", _configuration["Vnpay:TmnCode"]);
+            pay.AddRequestData("vnp_Amount", ((int)model.Amount * 100).ToString());
+            pay.AddRequestData("vnp_CreateDate", timeNow.ToString("yyyyMMddHHmmss"));
+            pay.AddRequestData("vnp_CurrCode", _configuration["Vnpay:CurrCode"]);
+            pay.AddRequestData("vnp_IpAddr", pay.GetIpAddress(context));
+            pay.AddRequestData("vnp_Locale", _configuration["Vnpay:Locale"]);
+            pay.AddRequestData("vnp_OrderInfo", $"{model.Name}|{model.OrderDescription}|{model.Amount}");
+            pay.AddRequestData("vnp_OrderType", model.OrderType);
+            pay.AddRequestData("vnp_ReturnUrl", urlCallBack);
+            pay.AddRequestData("vnp_TxnRef", tick);
+            pay.AddRequestData("vnp_ExpireDate", expireDate);
+
+            var paymentUrl =
+                pay.CreateRequestUrl(_configuration["Vnpay:BaseUrl"], _configuration["Vnpay:HashSecret"]);
+            Console.WriteLine("Payment URL: " + paymentUrl);
+
+            return paymentUrl;
+        }
+
+
+        public PaymentResponseModel PaymentExecute(IQueryCollection collections)
+        {
+            var pay = new VnPayLibrary();
+            var response = pay.GetFullResponseData(collections, _configuration["Vnpay:HashSecret"]);
+
+            return response;
         }
     }
 }

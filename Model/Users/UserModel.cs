@@ -1,4 +1,6 @@
-﻿namespace E_learning.Model.Users
+﻿using E_learning.Enums;
+
+namespace E_learning.Model.Users
 {
     public class UserModel
     {
@@ -8,6 +10,6 @@
         public string Email { get; set; }
         public string FirstName { get; set; }
         public string LastName { get; set; }
-        public string UserRole { get; set; }
+        public UserRole UserRole { get; set; }
     }
 }

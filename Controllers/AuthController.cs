@@ -1,24 +1,22 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Users;
-using E_learning.Repositories;
-using Microsoft.AspNetCore.Components;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using E_learning.Services;
 using Microsoft.AspNetCore.Authorization;
-
 using E_learning.Enums;
 using E_learning.DTO.Auth;
+using E_learning.Repositories.Auth;
 
 namespace E_learning.Controllers
 {
     [ApiController]
-    [Microsoft.AspNetCore.Mvc.Route("api/[controller]")]
+    [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly IAuthRepository _authRepo ;
+        private readonly IAuthRepository _authRepo;
         private readonly IConfiguration _configuration;
         private readonly GenerateID _generateID;
 
@@ -30,12 +28,17 @@ namespace E_learning.Controllers
         }
 
         [HttpPost("register")]
-        [AllowAnonymous] 
+        [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] RegisterDTO registerDto)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
+            }
+
+            if (!Enum.TryParse<UserRole>(registerDto.UserRole, true, out var userRoleEnum))
+            {
+                return BadRequest(new { Message = "Invalid user role provided. Valid roles are: Student, Lecturer, Admin." });
             }
 
             var userExists = await _authRepo.CheckUsernameExistsAsync(registerDto.Username);
@@ -52,12 +55,7 @@ namespace E_learning.Controllers
                 FirstName = registerDto.FirstName,
                 LastName = registerDto.LastName,
                 Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
-                UserRole = registerDto.UserRole switch
-                {
-                    "Lecturer" => UserRole.Lecturer.ToString(),
-                    "Student" => UserRole.Student.ToString(),
-                    _ => throw new ArgumentException("Invalid user role")
-                }
+                UserRole = userRoleEnum
             };
 
             var result = await _authRepo.AddUserAsync(user);
@@ -82,7 +80,7 @@ namespace E_learning.Controllers
 
             var token = GenerateJwtToken(user);
 
-            return Ok(new { token = token });
+            return Ok(new { token });
         }
 
         private string GenerateJwtToken(UserModel user)

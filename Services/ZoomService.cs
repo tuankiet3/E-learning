@@ -2,8 +2,8 @@
 using E_learning.Model.Zoom;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net.Http.Headers;
-using System.Text.Json;
 using System.Text;
+using System.Text.Json;
 
 namespace E_learning.Services
 {
@@ -20,19 +20,38 @@ namespace E_learning.Services
             _memoryCache = memoryCache;
         }
 
-        public async Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDTO, string email)
+        public async Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string email)
         {
             var accessToken = await GetZoomAccessTokenAsync();
             var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            var jsonContent = JsonSerializer.Serialize(meetingDTO, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+            var meetingObject = new
+            {
+                topic = meetingDto.Topic,
+                type = meetingDto.Type,
+                start_time = meetingDto.StartTime,
+                duration = meetingDto.Duration,
+                timezone = meetingDto.Timezone,
+                settings = new
+                {
+                    join_before_host = true,
+                    mute_upon_entry = true,
+                    participant_video = true,
+                    host_video = true,
+                    auto_recording = "none"
+                }
+            };
+
+            var jsonContent = JsonSerializer.Serialize(meetingObject);
             var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
             var response = await client.PostAsync($"https://api.zoom.us/v2/users/{email}/meetings", content);
 
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync();
-                throw new Exception($"Failed to create Zoom meeting: {error}");
+                throw new Exception($"Failed to create Zoom meeting. Zoom API returned: {response.StatusCode} - {error}");
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
@@ -49,6 +68,7 @@ namespace E_learning.Services
             {
                 return accessToken;
             }
+
             var clientId = _configuration["Zoom:ClientId"];
             var clientSecret = _configuration["Zoom:ClientSecret"];
             var accountId = _configuration["Zoom:AccountId"];
@@ -56,7 +76,6 @@ namespace E_learning.Services
             var client = _httpClientFactory.CreateClient();
             var request = new HttpRequestMessage(HttpMethod.Post, "https://zoom.us/oauth/token");
 
-            // Tạo Basic Authentication header
             var authValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
             request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -73,7 +92,6 @@ namespace E_learning.Services
             accessToken = tokenData.GetProperty("access_token").GetString();
             var expiresIn = tokenData.GetProperty("expires_in").GetInt32();
 
-            // Lưu token vào cache, trừ đi 5 phút để đảm bảo an toàn
             _memoryCache.Set(cacheKey, accessToken, TimeSpan.FromSeconds(expiresIn - 300));
 
             return accessToken;

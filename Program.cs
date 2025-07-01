@@ -1,5 +1,4 @@
-﻿using E_learning.Repositories;
-using E_learning.DAL.Course;
+﻿using E_learning.DAL.Course;
 using E_learning.DAL.Auth;
 using E_learning.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -8,6 +7,7 @@ using System.Text;
 using Microsoft.OpenApi.Models;
 using E_learning.Repositories.Course;
 using E_learning.Services.VNPay;
+using E_learning.Repositories.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 

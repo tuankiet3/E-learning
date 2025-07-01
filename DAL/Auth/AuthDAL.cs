@@ -1,4 +1,5 @@
-﻿using E_learning.Model.Users;
+﻿using E_learning.Enums;
+using E_learning.Model.Users;
 using Microsoft.Data.SqlClient;
 
 namespace E_learning.DAL.Auth
@@ -30,13 +31,17 @@ namespace E_learning.DAL.Auth
                         {
                             if (await reader.ReadAsync())
                             {
+                                Enum.TryParse<UserRole>(reader.GetString(reader.GetOrdinal("UserRole")), true, out var role);
+
                                 user = new UserModel
                                 {
                                     UserID = reader.GetString(reader.GetOrdinal("UserID")),
                                     Username = reader.GetString(reader.GetOrdinal("Username")),
-                                    Password = reader.GetString(reader.GetOrdinal("Password")), 
+                                    Password = reader.GetString(reader.GetOrdinal("Password")),
                                     Email = reader.GetString(reader.GetOrdinal("Email")),
-                                    UserRole = reader.GetString(reader.GetOrdinal("UserRole"))
+                                    FirstName = reader.GetString(reader.GetOrdinal("FirstName")),
+                                    LastName = reader.GetString(reader.GetOrdinal("LastName")),
+                                    UserRole = role
                                 };
                             }
                         }
@@ -85,7 +90,8 @@ namespace E_learning.DAL.Auth
                 command.Parameters.AddWithValue("@Email", user.Email);
                 command.Parameters.AddWithValue("@FirstName", user.FirstName);
                 command.Parameters.AddWithValue("@LastName", user.LastName);
-                command.Parameters.AddWithValue("@UserRole", user.UserRole);
+                // THAY ĐỔI: Chuyển enum thành chuỗi để lưu vào DB
+                command.Parameters.AddWithValue("@UserRole", user.UserRole.ToString());
                 await command.ExecuteNonQueryAsync();
             }
         }
