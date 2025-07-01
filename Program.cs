@@ -11,6 +11,7 @@ using E_learning.Repositories.Payment;
 using E_learning.Repositories.Enrollment;
 using E_learning.DAL.Payment;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Lấy chuỗi kết nối
@@ -54,8 +55,6 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
     };
 });
-
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -67,7 +66,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
+app.UseStaticFiles();
 app.UseHttpsRedirection();
 
 app.UseAuthentication(); 
