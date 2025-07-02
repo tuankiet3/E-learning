@@ -1,9 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
-using System.Threading.Tasks;
-using E_learning.DAL.Course;
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
@@ -34,6 +30,7 @@ namespace E_learning.Controllers.Course
             try
             {
                 List<CoursesModel> courses = await _courseRepo.GetAllCourses();
+                Console.WriteLine(courses);
                 if (courses == null || courses.Count == 0)
                 {
                     return NotFound("No courses found");
@@ -68,6 +65,7 @@ namespace E_learning.Controllers.Course
                     newID,
                     course.CourseName,
                     course.CoursePrice,
+                    course.CourseDescription,
                     course.Author
                 );
                 bool isInserted = await _courseRepo.InsertCourse(courseModel);

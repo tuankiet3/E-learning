@@ -50,6 +50,11 @@ namespace E_learning.Services
             string numberString = generateID();
             return $"PID{numberString}";
         }
+        public string GenerateQuestionID()
+        {
+            string numberString = generateID();
+            return $"QTID{numberString}";
+        }
 
     }
 }

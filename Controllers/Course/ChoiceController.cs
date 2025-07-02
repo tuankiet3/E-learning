@@ -1,9 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
-using System.Threading.Tasks;
-using E_learning.DAL.Course;
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
@@ -72,7 +68,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpPost("InsertChoice")]
-        [ProducesResponseType(typeof(ChoiceModel), statusCode: 201)]
+        [ProducesResponseType(typeof(ChoiceModel), statusCode: 200)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> InsertChoice([FromBody] ChoiceDTO choice)
@@ -88,14 +84,14 @@ namespace E_learning.Controllers.Course
                     newID,
                     choice.ChoiceText,
                     choice.IsCorrect,
-                    choice.QuizID
+                    choice.QuestionID
                 );
                 bool isInserted = await _courseRepo.InsertChoice(choiceModel);
                 if (!isInserted)
                 {
                     return BadRequest("Failed to insert choice");
                 }
-                return CreatedAtAction(nameof(GetChoicesByQuizID), new { quizID = choice.QuizID }, choiceModel);
+                return Ok(new {Message = "Choice inserted successfully.", Choice = choiceModel });
             }
             catch (Exception ex)
             {

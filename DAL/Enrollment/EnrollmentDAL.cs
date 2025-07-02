@@ -1,14 +1,15 @@
 ﻿using E_learning.Model.Enrollment;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Enrollment
 {
     public class EnrollmentDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<EnrollmentDAL> _logger;
-        public EnrollmentDAL(string connectionString, ILogger<EnrollmentDAL> logger)
+        public EnrollmentDAL(IConfiguration configuration, ILogger<EnrollmentDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         public async Task<bool> InsertEnrollment(EnrollmentModel Enroll)
@@ -18,11 +19,11 @@ namespace E_learning.DAL.Enrollment
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "INSERT INTO Enrollment (EnrollmentID, UserID, CourseID) VALUES (@EnrollmentID, @UserID, @CourseID)";
+                    string query = "INSERT INTO Enrollments (EnrollmentID, StudentID, CourseID) VALUES (@EnrollmentID, @StudentID, @CourseID)";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@EnrollmentID", Enroll.GetEnrollmentID);
-                        command.Parameters.AddWithValue("@UserID", Enroll.GetUserID);
+                        command.Parameters.AddWithValue("@StudentID", Enroll.GetUserID);
                         command.Parameters.AddWithValue("@CourseID", Enroll.GetCourseID);
                    
                         int rowsAffected = await command.ExecuteNonQueryAsync();
@@ -45,7 +46,7 @@ namespace E_learning.DAL.Enrollment
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Enrollment";
+                    string query = "SELECT * FROM Enrollments";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
@@ -77,7 +78,7 @@ namespace E_learning.DAL.Enrollment
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Enrollment WHERE UserID = @UserID";
+                    string query = "SELECT * FROM Enrollments WHERE UserID = @UserID";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@UserID", userID);

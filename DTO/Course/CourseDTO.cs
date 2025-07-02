@@ -12,7 +12,8 @@ namespace E_learning.DTO.Course
         public decimal CoursePrice { get; set; }
         [Required(ErrorMessage = "Author is not null")]
         public string Author { get; set; }
-
+        [Required(ErrorMessage = "Course description is not null")]
+        public string CourseDescription { get; set; }
 
     }
 }

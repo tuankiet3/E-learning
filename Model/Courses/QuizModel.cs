@@ -5,6 +5,11 @@
         private string quizID { get; set; }
         private string quizTitle { get; set; }
         private string courseID { get; set; }
+        // Public properties to expose to Web API
+        public string QuizID => quizID;
+        public string QuizTitle => quizTitle;
+        public string CourseID => courseID;
+        // Getter/Setter methods
         public string getQuizID()
         {
             return quizID;

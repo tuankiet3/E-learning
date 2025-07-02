@@ -5,15 +5,16 @@ using System.Collections.Generic;
 using System.Data;
 using E_learning.Model;
 using E_learning.Model.Courses;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
     public class CoursesDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<CoursesDAL> _logger;
-        public CoursesDAL(string connectionString, ILogger<CoursesDAL> logger)
+        public CoursesDAL(IConfiguration configuration, ILogger<CoursesDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         // lấy toàn bộ khóa học`
@@ -25,7 +26,7 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Courses";
+                    string query = "select * from Courses";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
@@ -35,8 +36,11 @@ namespace E_learning.DAL.Course
                                 string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
                                 string courseName = reader.GetString(reader.GetOrdinal("CourseName"));
                                 decimal coursePrice = reader.GetDecimal(reader.GetOrdinal("CoursePrice"));
+                                string courseDescription = reader.GetString(reader.GetOrdinal("CourseDescription"));
                                 string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
-                                CoursesModel course = new CoursesModel(courseID, courseName, coursePrice, authorID);
+                                Console.WriteLine("ádasd" + courseID + courseName + coursePrice + courseDescription + authorID);
+                                CoursesModel course = new CoursesModel(courseID, courseName, coursePrice, courseDescription, authorID);
+                                Console.WriteLine("ádasd0" + course);
                                 courses.Add(course);
                             }
                         }
@@ -57,12 +61,13 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "INSERT INTO Courses (CourseID, CourseName, CoursePrice, AuthorID) VALUES (@CourseID, @CourseName, @CoursePrice, @AuthorID)";
+                    string query = "INSERT INTO Courses (CourseID, CourseName, CoursePrice,CourseDescription , AuthorID) VALUES (@CourseID, @CourseName, @CoursePrice,@CourseDescription, @AuthorID)";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@CourseID", course.GetCourseID());
                         command.Parameters.AddWithValue("@CourseName", course.GetCourseName());
                         command.Parameters.AddWithValue("@CoursePrice", course.GetCoursePrice());
+                        command.Parameters.AddWithValue("@CourseDescription", course.GetCourseDescription());
                         command.Parameters.AddWithValue("@AuthorID", course.GetAuthorID());
                         int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
@@ -117,8 +122,9 @@ namespace E_learning.DAL.Course
                             {
                                 string courseName = reader.GetString(reader.GetOrdinal("CourseName"));
                                 decimal coursePrice = reader.GetDecimal(reader.GetOrdinal("CoursePrice"));
+                                string courseDescription = reader.GetString(reader.GetOrdinal("CourseDescription"));
                                 string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
-                                course = new CoursesModel(courseID, courseName, coursePrice, authorID);
+                                course = new CoursesModel(courseID, courseName, coursePrice, courseDescription, authorID);
                             }
                         }
                     }
@@ -132,27 +138,27 @@ namespace E_learning.DAL.Course
         }
 
         // Kiểm tra ID khóa học
-        public async Task<bool> CheckCourseIDExists(string courseID)
-        {
-            try
-            {
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    await connection.OpenAsync();
-                    string query = "SELECT COUNT(*) FROM Courses WHERE CourseID = @CourseID";
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        command.Parameters.AddWithValue("@CourseID", courseID);
-                        int count = (int)await command.ExecuteScalarAsync();
-                        return count > 0;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking if course ID exists");
-                return false;
-            }
-        }
+        //public async Task<bool> CheckCourseIDExists(string courseID)
+        //{
+        //    try
+        //    {
+        //        using (SqlConnection connection = new SqlConnection(_connectionString))
+        //        {
+        //            await connection.OpenAsync();
+        //            string query = "SELECT COUNT(*) FROM Courses WHERE CourseID = @CourseID";
+        //            using (SqlCommand command = new SqlCommand(query, connection))
+        //            {
+        //                command.Parameters.AddWithValue("@CourseID", courseID);
+        //                int count = (int)await command.ExecuteScalarAsync();
+        //                return count > 0;
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error checking if course ID exists");
+        //        return false;
+        //    }
+        //}
     }
 }

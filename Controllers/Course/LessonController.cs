@@ -1,9 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
-using System.Threading.Tasks;
-using E_learning.DAL.Course;
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;

@@ -1,5 +1,6 @@
 ﻿using E_learning.Model.Users;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 
 namespace E_learning.DAL.Auth
 {
@@ -8,9 +9,9 @@ namespace E_learning.DAL.Auth
         private readonly string _connectionString;
         private readonly ILogger<AuthDAL> _logger;
 
-        public AuthDAL(string connectionString, ILogger<AuthDAL> logger)
+        public AuthDAL(IConfiguration configuration, ILogger<AuthDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
 

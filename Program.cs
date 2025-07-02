@@ -10,32 +10,31 @@ using E_learning.Services.VNPay;
 using E_learning.Repositories.Payment;
 using E_learning.Repositories.Enrollment;
 using E_learning.DAL.Payment;
+using E_learning.DAL.Enrollment;
 
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Lấy chuỗi kết nối
-var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection");
-// Đăng kí VNPayService
-builder.Services.AddScoped<VnPayService>();
-// Đăng ký các DAL
-builder.Services.AddSingleton(provider => new CoursesDAL(connectionString, provider.GetRequiredService<ILogger<CoursesDAL>>()));
-builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provider.GetRequiredService<ILogger<LessonDAL>>()));
-builder.Services.AddSingleton(provider => new QuizDAL(connectionString, provider.GetRequiredService<ILogger<QuizDAL>>()));
-builder.Services.AddSingleton(provider => new ChoiceDAL(connectionString, provider.GetRequiredService<ILogger<ChoiceDAL>>()));
-builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider.GetRequiredService<ILogger<AuthDAL>>()));
-builder.Services.AddSingleton(provider => new PaymentDAL(connectionString, provider.GetRequiredService<ILogger<PaymentDAL>>()));
-
-
+builder.Services.AddSingleton<CoursesDAL>();
+builder.Services.AddSingleton<LessonDAL>();
+builder.Services.AddSingleton<QuizDAL>();
+builder.Services.AddSingleton<ChoiceDAL>();
+builder.Services.AddSingleton<AuthDAL>();
+builder.Services.AddSingleton<PaymentDAL>();
+builder.Services.AddSingleton<EnrollmentDAL>();
+builder.Services.AddSingleton<QuestionDAL>();
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 //builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<GenerateID>();
 builder.Services.AddScoped<CheckExsistingID>();
-
-
+builder.Services.AddScoped<Normalize>();
+builder.Services.AddScoped<VnPayService>();
+builder.Services.AddScoped<VnPayLibrary>();
 // === CẤU HÌNH JWT AUTHENTICATION ===
 builder.Services.AddAuthentication(options =>
 {
