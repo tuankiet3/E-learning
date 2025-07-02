@@ -54,6 +54,7 @@ namespace E_learning.Controllers
                 Email = registerDto.Email,
                 FirstName = registerDto.FirstName,
                 LastName = registerDto.LastName,
+                FullName = $"{registerDto.FirstName} {registerDto.LastName}",
                 Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
                 UserRole = userRoleEnum
             };

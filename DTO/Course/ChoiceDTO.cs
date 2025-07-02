@@ -9,6 +9,6 @@ namespace E_learning.DTO.Course
         [Required(ErrorMessage = "IsCorrect field is required")]
         public bool IsCorrect { get; set; }
         [Required(ErrorMessage = "Quiz ID is required")]
-        public string QuizID { get; set; }
+        public string QuestionID { get; set; }
     }
 }

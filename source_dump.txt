@@ -14,6 +14,7 @@ E-learning/
 │   │   ├── ChoiceController.cs
 │   │   ├── CourseController.cs
 │   │   ├── LessonController.cs
+│   │   ├── QuestionController.cs
 │   │   └── QuizController.cs
 │   ├── Enrollment/
 │   │   └── EnrollmentController.cs
@@ -28,6 +29,7 @@ E-learning/
 │   │   ├── ChoiceDAL.cs
 │   │   ├── CoursesDAL.cs
 │   │   ├── LessonDAL.cs
+│   │   ├── QuestionDAL.cs
 │   │   └── QuizDAL.cs
 │   ├── Enrollment/
 │   │   └── EnrollmentDAL.cs
@@ -41,6 +43,7 @@ E-learning/
 │   │   ├── ChoiceDTO.cs
 │   │   ├── CourseDTO.cs
 │   │   ├── LessonDTO.cs
+│   │   ├── QuestionDTO.cs
 │   │   └── QuizDTO.cs
 │   ├── Enrollment/
 │   │   └── EnrollmentDTO.cs
@@ -54,6 +57,7 @@ E-learning/
 │   │   ├── ChoiceModel.cs
 │   │   ├── CoursesModel.cs
 │   │   ├── LessonModel.cs
+│   │   ├── QuestionModel.cs
 │   │   └── QuizModel.cs
 │   ├── Enrollment/
 │   │   └── EnrollmentModel.cs
@@ -90,6 +94,7 @@ E-learning/
 │   ├── CheckExsistingID.cs
 │   ├── GenerateID.cs
 │   ├── IZoomService.cs
+│   ├── Normalize.cs
 │   └── ZoomService.cs
 ├── bin/
 ├── obj/
@@ -112,28 +117,27 @@ E-learning/
 using E_learning.DAL.Course;
 using E_learning.Repositories.Auth;
 using E_learning.Repositories.Course;
-using E_learning.Repositories.Enrollment; // Thêm using này
-using E_learning.DAL.Enrollment; // Thêm using này
+using E_learning.Repositories.Enrollment; 
+using E_learning.DAL.Enrollment;
 using E_learning.Services;
 using E_learning.Services.VNPay;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using E_learning.Repositories.Payment;
+using E_learning.DAL.Payment;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Lấy chuỗi kết nối
-var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection");
-
-// Đăng ký các DAL
-builder.Services.AddSingleton(provider => new CoursesDAL(connectionString, provider.GetRequiredService<ILogger<CoursesDAL>>()));
-builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provider.GetRequiredService<ILogger<LessonDAL>>()));
-builder.Services.AddSingleton(provider => new QuizDAL(connectionString, provider.GetRequiredService<ILogger<QuizDAL>>()));
-builder.Services.AddSingleton(provider => new ChoiceDAL(connectionString, provider.GetRequiredService<ILogger<ChoiceDAL>>()));
-builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider.GetRequiredService<ILogger<AuthDAL>>()));
-builder.Services.AddSingleton(provider => new EnrollmentDAL(connectionString, provider.GetRequiredService<ILogger<EnrollmentDAL>>())); // <-- THÊM DÒNG NÀY
-
+builder.Services.AddSingleton<CoursesDAL>();
+builder.Services.AddSingleton<LessonDAL>();
+builder.Services.AddSingleton<QuizDAL>();
+builder.Services.AddSingleton<ChoiceDAL>();
+builder.Services.AddSingleton<AuthDAL>();
+builder.Services.AddSingleton<PaymentDAL>();
+builder.Services.AddSingleton<EnrollmentDAL>();
+builder.Services.AddSingleton<QuestionDAL>();
 
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
@@ -152,6 +156,26 @@ builder.Services.AddHttpClient("Zoom", client =>
 });
 
 // Cấu hình JWT Authentication
+builder.Services.AddSingleton<CoursesDAL>();
+builder.Services.AddSingleton<LessonDAL>();
+builder.Services.AddSingleton<QuizDAL>();
+builder.Services.AddSingleton<ChoiceDAL>();
+builder.Services.AddSingleton<AuthDAL>();
+builder.Services.AddSingleton<PaymentDAL>();
+builder.Services.AddSingleton<EnrollmentDAL>();
+builder.Services.AddSingleton<QuestionDAL>();
+// Đăng ký Repository và các service khác
+builder.Services.AddScoped<ICourseRepository, CourseRepository>();
+builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
+//builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
+builder.Services.AddScoped<GenerateID>();
+builder.Services.AddScoped<CheckExsistingID>();
+builder.Services.AddScoped<Normalize>();
+builder.Services.AddScoped<VnPayService>();
+builder.Services.AddScoped<VnPayLibrary>();
+// === CẤU HÌNH JWT AUTHENTICATION ===
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -277,6 +301,7 @@ namespace E_learning.Controllers
                 Email = registerDto.Email,
                 FirstName = registerDto.FirstName,
                 LastName = registerDto.LastName,
+                FullName = $"{registerDto.FirstName} {registerDto.LastName}",
                 Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
                 UserRole = userRoleEnum
             };
@@ -413,10 +438,6 @@ namespace E_learning.Controllers
 ```cs
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
-using System.Threading.Tasks;
-using E_learning.DAL.Course;
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
@@ -485,7 +506,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpPost("InsertChoice")]
-        [ProducesResponseType(typeof(ChoiceModel), statusCode: 201)]
+        [ProducesResponseType(typeof(ChoiceModel), statusCode: 200)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> InsertChoice([FromBody] ChoiceDTO choice)
@@ -501,14 +522,14 @@ namespace E_learning.Controllers.Course
                     newID,
                     choice.ChoiceText,
                     choice.IsCorrect,
-                    choice.QuizID
+                    choice.QuestionID
                 );
                 bool isInserted = await _courseRepo.InsertChoice(choiceModel);
                 if (!isInserted)
                 {
                     return BadRequest("Failed to insert choice");
                 }
-                return CreatedAtAction(nameof(GetChoicesByQuizID), new { quizID = choice.QuizID }, choiceModel);
+                return Ok(new {Message = "Choice inserted successfully.", Choice = choiceModel });
             }
             catch (Exception ex)
             {
@@ -525,10 +546,6 @@ namespace E_learning.Controllers.Course
 ```cs
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
-using System.Threading.Tasks;
-using E_learning.DAL.Course;
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
@@ -559,6 +576,7 @@ namespace E_learning.Controllers.Course
             try
             {
                 List<CoursesModel> courses = await _courseRepo.GetAllCourses();
+                Console.WriteLine(courses);
                 if (courses == null || courses.Count == 0)
                 {
                     return NotFound("No courses found");
@@ -593,6 +611,7 @@ namespace E_learning.Controllers.Course
                     newID,
                     course.CourseName,
                     course.CoursePrice,
+                    course.CourseDescription,
                     course.Author
                 );
                 bool isInserted = await _courseRepo.InsertCourse(courseModel);
@@ -675,10 +694,6 @@ namespace E_learning.Controllers.Course
 ```cs
 ﻿using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
-using System.Threading.Tasks;
-using E_learning.DAL.Course;
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
@@ -839,6 +854,118 @@ namespace E_learning.Controllers.Course
         //}
     }
 }
+
+```
+
+### Controllers\Course\QuestionController.cs
+```cs
+﻿using Microsoft.AspNetCore.Mvc;
+using E_learning.Model.Courses;
+using E_learning.DTO.Course;
+using E_learning.Services;
+using E_learning.Repositories.Course;
+
+
+namespace E_learning.Controllers.Course
+{
+
+    [Route("api/[controller]")]
+    [ApiController]
+    public class QuestionController : Controller
+    {
+        private readonly ILogger<CourseController> _logger;
+        private readonly ICourseRepository _courseRepo;
+        private readonly GenerateID _generateID;
+        private readonly CheckExsistingID _checkExsistingID;
+        public QuestionController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID checkExsistingID)
+        {
+            _logger = logger;
+            _courseRepo = courseRepo;
+            _generateID = generateID;
+            _checkExsistingID = checkExsistingID;
+        }
+
+
+        [HttpGet("GetQuestionsByQuizID/{quizID}")]
+        [ProducesResponseType(typeof(IEnumerable<QuestionModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetQuestionsByQuizID(string quizID)
+        {
+            try
+            {
+                List<QuestionModel> questions = await _courseRepo.GetQuestionsByQuizID(quizID);
+                if (questions == null || questions.Count == 0)
+                {
+                    return NotFound("No questions found for the specified quiz ID");
+                }
+                return Ok(questions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving questions for quiz ID: {QuizID}", quizID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+        [HttpDelete("DeleteQuestion/{questionID}")]
+        [ProducesResponseType(statusCode: 204)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteQuestion(string questionID)
+        {
+            try
+            {
+                bool isDeleted = await _courseRepo.DeleteQuestion(questionID);
+                if (!isDeleted)
+                {
+                    return NotFound("Question not found");
+                }
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting question with ID: {QuestionID}", questionID);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpPost("InsertQuestion")]
+        [ProducesResponseType(typeof(QuestionModel), statusCode: 201)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> InsertQuestion([FromBody] QuestionDTO question)
+        {
+            if (question == null)
+            {
+                return BadRequest("Question data is null");
+            }
+            try
+            {
+                string newQuestionID = await _checkExsistingID.GenerateUniqueID(
+                    _courseRepo.getALLQuestion,
+                    q => q.GetQuestionID(),
+                    _generateID.GenerateQuestionID);
+                QuestionModel newQuestion = new QuestionModel
+                (
+                    newQuestionID,
+                    question.questionContent,
+                    question.quizID
+                );
+                bool isInserted = await _courseRepo.InsertQuestion(newQuestion);
+                if (!isInserted)
+                {
+                    return StatusCode(500, "Failed to insert question");
+                }
+                return CreatedAtAction(nameof(GetQuestionsByQuizID), new { quizID = question.quizID }, newQuestion);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting question");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+    }
+} 
 
 ```
 
@@ -1076,7 +1203,7 @@ namespace E_learning.Controllers.Payment
         private readonly ILogger<PaymentController> _logger;
         private readonly GenerateID _generateID;
         private readonly CheckExsistingID _checkExsistingID;
-        public PaymentController(VnPayService vnPayService, ILogger<PaymentController> logger,GenerateID generateID, CheckExsistingID checkExsistingID, IPaymentRepository paymentRepository )
+        public PaymentController(VnPayService vnPayService, ILogger<PaymentController> logger, GenerateID generateID, CheckExsistingID checkExsistingID, IPaymentRepository paymentRepository)
         {
             _vnPayService = vnPayService;
             _logger = logger;
@@ -1093,8 +1220,8 @@ namespace E_learning.Controllers.Payment
 
             try
             {
-                var paymentUrl = _vnPayService.CreatePaymentUrl(model, HttpContext, model.courseId);
-                Console.WriteLine("Payment URL: " + model.courseId);
+                var paymentUrl = _vnPayService.CreatePaymentUrl(model, HttpContext, model.courseId, model.BuyerID);
+
                 return Ok(new
                 {
                     success = true,
@@ -1112,16 +1239,16 @@ namespace E_learning.Controllers.Payment
         }
 
         [HttpGet("vnpay-return")]
-        public async Task<IActionResult> VNPayReturn([FromQuery] string courseId)
+        public async Task<IActionResult> VNPayReturn([FromQuery] string courseId, [FromQuery] string buyerId)
         {
             var response = _vnPayService.PaymentExecute(HttpContext.Request.Query);
             Console.WriteLine("Response: " + response.OrderInfo);
-            //string newPaymentID = await _checkExsistingID.GenerateUniqueID(
-            //    _paymentRepository.getAllPaymentAsync,
-            //    r => r.GetPaymentID(),
-            //    _generateID.GeneratePaymentID
-            //);
-            string newPaymentID = "123";
+            string newPaymentID = await _checkExsistingID.GenerateUniqueID(
+                _paymentRepository.getAllPaymentAsync,
+                r => r.GetPaymentID(),
+                _generateID.GeneratePaymentID
+            );
+
             string[] name_desc_amout = response.OrderInfo.Split('|');
             string[] desc_amout = name_desc_amout[1].Split('-');
             string buyerName = name_desc_amout[0];
@@ -1139,28 +1266,30 @@ namespace E_learning.Controllers.Payment
                     buyerName,
                     orderDescription,
                     orderAmount,
-                    courseID
+                    courseID,
+                    buyerId
                 );
-                //bool isSaved = await _paymentRepository.SavePaymentAsync(paymentModel);
-                //if (!isSaved)
-                //{
-                //    _logger.LogError("Failed to save payment information for course ID: {CourseID}", courseID);
-                //    return StatusCode(500, "Failed to save payment information.");
-                //}
-                    return Ok(new
+                bool isSaved = await _paymentRepository.SavePaymentAsync(paymentModel);
+                if (!isSaved)
+                {
+                    _logger.LogError("Failed to save payment information for course ID: {CourseID}", courseID);
+                    return StatusCode(500, "Failed to save payment information.");
+                }
+                return Ok(new
+                {
+                    success = true,
+                    message = "Thanh toán thành công",
+                    Object = new
                     {
-                        success = true,
-                        message = "Thanh toán thành công",
-                        Object = new
-                        {
-                            PaymentID = newPaymentID,
-                            BuyerName = buyerName,
-                            OrderDescription = orderDescription,
-                            OrderAmount = orderAmount,
-                            CourseID = courseID
-                        }
-                    });
-                
+                        PaymentID = newPaymentID,
+                        BuyerName = buyerName,
+                        OrderDescription = orderDescription,
+                        OrderAmount = orderAmount,
+                        CourseID = courseID,
+                        BuyerID = buyerId
+                    }
+                });
+
             }
             else
             {
@@ -1168,9 +1297,32 @@ namespace E_learning.Controllers.Payment
                 {
                     success = false,
                     message = "Thanh toán thất bại",
-                  
+
                 });
             }
+        }
+
+        [HttpGet("getAllPayment")]
+        [ProducesResponseType(typeof(IEnumerable<PaymentModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetAllPayment()
+        {
+            try
+            {
+                var payments = await _paymentRepository.getAllPaymentAsync();
+                if (payments == null || !payments.Any())
+                {
+                    return NotFound("No payments found");
+                }
+                return Ok(payments);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all payments");
+                return StatusCode(500, "Internal server error");
+            }
+
         }
     }
 }
@@ -1182,6 +1334,7 @@ namespace E_learning.Controllers.Payment
 ﻿using E_learning.Enums;
 using E_learning.Model.Users;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 
 namespace E_learning.DAL.Auth
 {
@@ -1190,9 +1343,9 @@ namespace E_learning.DAL.Auth
         private readonly string _connectionString;
         private readonly ILogger<AuthDAL> _logger;
 
-        public AuthDAL(string connectionString, ILogger<AuthDAL> logger)
+        public AuthDAL(IConfiguration configuration, ILogger<AuthDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
 
@@ -1222,6 +1375,7 @@ namespace E_learning.DAL.Auth
                                     Email = reader.GetString(reader.GetOrdinal("Email")),
                                     FirstName = reader.GetString(reader.GetOrdinal("FirstName")),
                                     LastName = reader.GetString(reader.GetOrdinal("LastName")),
+                                    FullName = $"{reader.GetString(reader.GetOrdinal("FirstName"))} {reader.GetString(reader.GetOrdinal("LastName"))}",
                                     UserRole = role
                                 };
                             }
@@ -1260,8 +1414,8 @@ namespace E_learning.DAL.Auth
 
         public async Task AddUserAsync(UserModel user, SqlConnection connection, SqlTransaction transaction)
         {
-            string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, UserRole) 
-                             VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName, @UserRole)";
+            string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, FullName, UserRole) 
+                             VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName,@FullName @UserRole)";
 
             using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
@@ -1271,39 +1425,36 @@ namespace E_learning.DAL.Auth
                 command.Parameters.AddWithValue("@Email", user.Email);
                 command.Parameters.AddWithValue("@FirstName", user.FirstName);
                 command.Parameters.AddWithValue("@LastName", user.LastName);
-                // THAY ĐỔI: Chuyển enum thành chuỗi để lưu vào DB
+                command.Parameters.AddWithValue("@FullName", user.FullName);
                 command.Parameters.AddWithValue("@UserRole", user.UserRole.ToString());
                 await command.ExecuteNonQueryAsync();
             }
         }
 
-        public async Task AddStudentAsync(string studentID, string userID, SqlConnection connection, SqlTransaction transaction)
+        public async Task AddStudentAsync(string userID, SqlConnection connection, SqlTransaction transaction)
         {
-            string query = "INSERT INTO Students (StudentID, UserID) VALUES (@StudentID, @UserID)";
+            string query = "INSERT INTO Students (UserID) VALUES (@UserID)";
             using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                command.Parameters.AddWithValue("@StudentID", studentID);
-                command.Parameters.AddWithValue("@UserID", userID);
+                command.Parameters.AddWithValue("@UserID", userID); 
                 await command.ExecuteNonQueryAsync();
             }
         }
 
-        public async Task AddLecturerAsync(string lecturerID, string userID, SqlConnection connection, SqlTransaction transaction)
+        public async Task AddLecturerAsync(string userID, SqlConnection connection, SqlTransaction transaction)
         {
-            string query = "INSERT INTO Lecturers (LecturerID, UserID) VALUES (@LecturerID, @UserID)";
+            string query = "INSERT INTO Lecturers (UserID) VALUES (@UserID)";
             using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                command.Parameters.AddWithValue("@LecturerID", lecturerID);
                 command.Parameters.AddWithValue("@UserID", userID);
                 await command.ExecuteNonQueryAsync();
             }
         }
-        public async Task AddAdminAsync(string adminID, string userID, SqlConnection connection, SqlTransaction transaction)
+        public async Task AddAdminAsync(string userID, SqlConnection connection, SqlTransaction transaction)
         {
-            string query = "INSERT INTO Admin (AdminID, UserID) VALUES (@AdminID, @UserID)";
+            string query = "INSERT INTO Admin (UserID) VALUES (@UserID)";
             using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                command.Parameters.AddWithValue("@AdminID", adminID);
                 command.Parameters.AddWithValue("@UserID", userID);
                 await command.ExecuteNonQueryAsync();
             }
@@ -1320,25 +1471,22 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using E_learning.Model.Courses;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
-    //public LessonDAL(IConfiguration configuration, ILogger<LessonDAL> logger)
-    //{
-    //    _connectionString = configuration.GetConnectionString("SqlServerConnection");
-    //    _logger = logger;
-    //}
+  
     public class ChoiceDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<ChoiceDAL> _logger;
 
-        public ChoiceDAL(string connectionString, ILogger<ChoiceDAL> logger)
+        public ChoiceDAL(IConfiguration configuration, ILogger<ChoiceDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         // lấy toàn bô choices theo quizID
-        public async Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID)
+        public async Task<List<ChoiceModel>> GetChoicesByQuizID(string QuestionID)
         {
             List<ChoiceModel> choices = new List<ChoiceModel>();
             try
@@ -1346,10 +1494,10 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Choices WHERE QuizID = @QuizID";
+                    string query = "SELECT * FROM Choices WHERE QuestionID = @QuestionID";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
-                        command.Parameters.AddWithValue("@QuizID", quizID);
+                        command.Parameters.AddWithValue("@QuestionID", QuestionID);
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
                         {
                             while (await reader.ReadAsync())
@@ -1357,7 +1505,7 @@ namespace E_learning.DAL.Course
                                 string choiceID = reader.GetString(reader.GetOrdinal("ChoiceID"));
                                 string choiceText = reader.GetString(reader.GetOrdinal("ChoiceText"));
                                 bool isCorrect = reader.GetBoolean(reader.GetOrdinal("IsCorrect"));
-                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, quizID);
+                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, QuestionID);
                                 choices.Add(choice);
                             }
                         }
@@ -1366,7 +1514,7 @@ namespace E_learning.DAL.Course
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving choices for quiz ID: {QuizID}", quizID);
+                _logger.LogError(ex, "Error retrieving choices for quiz ID: {QuestionID}", QuestionID);
             }
             return choices;
         }
@@ -1401,13 +1549,13 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "INSERT INTO Choices (ChoiceID, ChoiceText, IsCorrect, QuizID) VALUES (@ChoiceID, @ChoiceText, @IsCorrect, @QuizID)";
+                    string query = "INSERT INTO Choices (ChoiceID, ChoiceText, IsCorrect, QuestionID) VALUES (@ChoiceID, @ChoiceText, @IsCorrect, @QuestionID)";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@ChoiceID", choice.GetChoiceID());
                         command.Parameters.AddWithValue("@ChoiceText", choice.GetChoiceText());
                         command.Parameters.AddWithValue("@IsCorrect", choice.GetIsCorrect());
-                        command.Parameters.AddWithValue("@QuizID", choice.GetQuizID());
+                        command.Parameters.AddWithValue("@QuestionID", choice.getQuestionID());
                         int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
                     }
@@ -1438,8 +1586,8 @@ namespace E_learning.DAL.Course
                                 string choiceID = reader.GetString(reader.GetOrdinal("ChoiceID"));
                                 string choiceText = reader.GetString(reader.GetOrdinal("ChoiceText"));
                                 bool isCorrect = reader.GetBoolean(reader.GetOrdinal("IsCorrect"));
-                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
-                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, quizID);
+                                string QuestionID = reader.GetString(reader.GetOrdinal("QuestionID"));
+                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, QuestionID);
                                 choices.Add(choice);
                             }
                         }
@@ -1466,15 +1614,16 @@ using System.Collections.Generic;
 using System.Data;
 using E_learning.Model;
 using E_learning.Model.Courses;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
     public class CoursesDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<CoursesDAL> _logger;
-        public CoursesDAL(string connectionString, ILogger<CoursesDAL> logger)
+        public CoursesDAL(IConfiguration configuration, ILogger<CoursesDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         // lấy toàn bộ khóa học`
@@ -1486,7 +1635,7 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Courses";
+                    string query = "select * from Courses";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
@@ -1496,8 +1645,11 @@ namespace E_learning.DAL.Course
                                 string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
                                 string courseName = reader.GetString(reader.GetOrdinal("CourseName"));
                                 decimal coursePrice = reader.GetDecimal(reader.GetOrdinal("CoursePrice"));
+                                string courseDescription = reader.GetString(reader.GetOrdinal("CourseDescription"));
                                 string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
-                                CoursesModel course = new CoursesModel(courseID, courseName, coursePrice, authorID);
+                                Console.WriteLine("ádasd" + courseID + courseName + coursePrice + courseDescription + authorID);
+                                CoursesModel course = new CoursesModel(courseID, courseName, coursePrice, courseDescription, authorID);
+                                Console.WriteLine("ádasd0" + course);
                                 courses.Add(course);
                             }
                         }
@@ -1518,12 +1670,13 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "INSERT INTO Courses (CourseID, CourseName, CoursePrice, AuthorID) VALUES (@CourseID, @CourseName, @CoursePrice, @AuthorID)";
+                    string query = "INSERT INTO Courses (CourseID, CourseName, CoursePrice,CourseDescription , AuthorID) VALUES (@CourseID, @CourseName, @CoursePrice,@CourseDescription, @AuthorID)";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@CourseID", course.GetCourseID());
                         command.Parameters.AddWithValue("@CourseName", course.GetCourseName());
                         command.Parameters.AddWithValue("@CoursePrice", course.GetCoursePrice());
+                        command.Parameters.AddWithValue("@CourseDescription", course.GetCourseDescription());
                         command.Parameters.AddWithValue("@AuthorID", course.GetAuthorID());
                         int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
@@ -1578,8 +1731,9 @@ namespace E_learning.DAL.Course
                             {
                                 string courseName = reader.GetString(reader.GetOrdinal("CourseName"));
                                 decimal coursePrice = reader.GetDecimal(reader.GetOrdinal("CoursePrice"));
+                                string courseDescription = reader.GetString(reader.GetOrdinal("CourseDescription"));
                                 string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
-                                course = new CoursesModel(courseID, courseName, coursePrice, authorID);
+                                course = new CoursesModel(courseID, courseName, coursePrice, courseDescription, authorID);
                             }
                         }
                     }
@@ -1593,28 +1747,28 @@ namespace E_learning.DAL.Course
         }
 
         // Kiểm tra ID khóa học
-        public async Task<bool> CheckCourseIDExists(string courseID)
-        {
-            try
-            {
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    await connection.OpenAsync();
-                    string query = "SELECT COUNT(*) FROM Courses WHERE CourseID = @CourseID";
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        command.Parameters.AddWithValue("@CourseID", courseID);
-                        int count = (int)await command.ExecuteScalarAsync();
-                        return count > 0;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking if course ID exists");
-                return false;
-            }
-        }
+        //public async Task<bool> CheckCourseIDExists(string courseID)
+        //{
+        //    try
+        //    {
+        //        using (SqlConnection connection = new SqlConnection(_connectionString))
+        //        {
+        //            await connection.OpenAsync();
+        //            string query = "SELECT COUNT(*) FROM Courses WHERE CourseID = @CourseID";
+        //            using (SqlCommand command = new SqlCommand(query, connection))
+        //            {
+        //                command.Parameters.AddWithValue("@CourseID", courseID);
+        //                int count = (int)await command.ExecuteScalarAsync();
+        //                return count > 0;
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error checking if course ID exists");
+        //        return false;
+        //    }
+        //}
     }
 }
 
@@ -1627,15 +1781,16 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using E_learning.Model.Courses;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
     public class LessonDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<LessonDAL> _logger;
-        public LessonDAL(string connectionString, ILogger<LessonDAL> logger)
+        public LessonDAL(IConfiguration configuration, ILogger<LessonDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         // Lấy toàn bộ bài học theo CourseID
@@ -1759,6 +1914,140 @@ namespace E_learning.DAL.Course
 
 ```
 
+### DAL\Course\QuestionDAL.cs
+```cs
+﻿using E_learning.Model.Courses;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+
+namespace E_learning.DAL.Course
+{
+    public class QuestionDAL
+    {
+        private readonly string _connectionString;
+        private readonly ILogger<QuestionDAL> _logger;
+        public QuestionDAL(IConfiguration configuration, ILogger<QuestionDAL> logger)
+        {
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
+            _logger = logger;
+        }
+        public async Task<List<QuestionModel>> getALLQuestion()
+        {
+            List<QuestionModel> questions = new List<QuestionModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Question ";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string questionID = reader.GetString(reader.GetOrdinal("QuestionID"));
+                                string questionText = reader.GetString(reader.GetOrdinal("QuestionContent"));
+                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
+                                QuestionModel question = new QuestionModel(questionID, questionText, quizID);
+                                questions.Add(question);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving questions");
+            }
+            return questions;
+        }
+
+        public async Task<bool> InsertQuestion(QuestionModel question)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "INSERT INTO Question (QuestionID, QuestionContent, QuizID) VALUES (@QuestionID, @QuestionContent, @QuizID)";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@QuestionID", question.GetQuestionID);
+                        command.Parameters.AddWithValue("@QuestionContent", question.GetQuestionContent);
+                        command.Parameters.AddWithValue("@QuizID", question.GetQuizID);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inserting question");
+                return false;
+            }
+        }
+
+        public async Task<List<QuestionModel>> GetQuestionsByQuizID(string quizID)
+        {
+            List<QuestionModel> questions = new List<QuestionModel>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT * FROM Question WHERE QuizID = @QuizID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@QuizID", quizID);
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string questionID = reader.GetString(reader.GetOrdinal("QuestionID"));
+                                string questionText = reader.GetString(reader.GetOrdinal("QuestionContent"));
+                                QuestionModel question = new QuestionModel(questionID, questionText, quizID);
+                                questions.Add(question);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving questions for quiz ID: {QuizID}", quizID);
+            }
+            return questions;
+        }
+
+        public async Task<bool> DeleteQuestion(string questionID)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "DELETE FROM Question WHERE QuestionID = @QuestionID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@QuestionID", questionID);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting question with ID: {QuestionID}", questionID);
+                return false;
+            }
+        }
+
+    }
+}
+
+```
+
 ### DAL\Course\QuizDAL.cs
 ```cs
 ﻿using Microsoft.Data.SqlClient;
@@ -1766,15 +2055,16 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using E_learning.Model.Courses;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
     public class QuizDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<QuizDAL> _logger;
-        public QuizDAL(string connectionString, ILogger<QuizDAL> logger)
+        public QuizDAL(IConfiguration configuration, ILogger<QuizDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         // Lấy toàn bộ quiz theo CourseID
@@ -1898,15 +2188,16 @@ namespace E_learning.DAL.Course
 ```cs
 ﻿using E_learning.Model.Enrollment;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Enrollment
 {
     public class EnrollmentDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<EnrollmentDAL> _logger;
-        public EnrollmentDAL(string connectionString, ILogger<EnrollmentDAL> logger)
+        public EnrollmentDAL(IConfiguration configuration, ILogger<EnrollmentDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         public async Task<bool> InsertEnrollment(EnrollmentModel Enroll)
@@ -1916,11 +2207,11 @@ namespace E_learning.DAL.Enrollment
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "INSERT INTO Enrollment (EnrollmentID, UserID, CourseID) VALUES (@EnrollmentID, @UserID, @CourseID)";
+                    string query = "INSERT INTO Enrollments (EnrollmentID, StudentID, CourseID) VALUES (@EnrollmentID, @StudentID, @CourseID)";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@EnrollmentID", Enroll.GetEnrollmentID);
-                        command.Parameters.AddWithValue("@UserID", Enroll.GetUserID);
+                        command.Parameters.AddWithValue("@StudentID", Enroll.GetUserID);
                         command.Parameters.AddWithValue("@CourseID", Enroll.GetCourseID);
                    
                         int rowsAffected = await command.ExecuteNonQueryAsync();
@@ -1943,7 +2234,7 @@ namespace E_learning.DAL.Enrollment
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Enrollment";
+                    string query = "SELECT * FROM Enrollments";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
@@ -1975,7 +2266,7 @@ namespace E_learning.DAL.Enrollment
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Enrollment WHERE UserID = @UserID";
+                    string query = "SELECT * FROM Enrollments WHERE UserID = @UserID";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@UserID", userID);
@@ -2014,9 +2305,9 @@ namespace E_learning.DAL.Payment
     {
         private readonly string _connectionString;
         private readonly ILogger<PaymentDAL> _logger;
-        public PaymentDAL(string connectionString, ILogger<PaymentDAL> logger)
+        public PaymentDAL(IConfiguration configuration, ILogger<PaymentDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
 
@@ -2027,13 +2318,18 @@ namespace E_learning.DAL.Payment
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    var query = "INSERT INTO Payments (PaymentID, buyerName, Description, Amout, CourseID) VALUES (@PaymentID, @buyerName, @Description, @Amout, @CourseID)";
+
+                    var query = @"INSERT INTO Payments (PaymentID, BuyerName, Description, Amout, CourseID, BuyerID) VALUES 
+                    (@PaymentID, @BuyerName, @Description, @Amout, @CourseID, @BuyerID)";
+
                     var command = new SqlCommand(query, connection);
-                    command.Parameters.AddWithValue("@PaymentID", paymentModel.GetPaymentID);
-                    command.Parameters.AddWithValue("@buyerName", paymentModel.GetBuyerName);
-                    command.Parameters.AddWithValue("@Description", paymentModel.GetDescription);
-                    command.Parameters.AddWithValue("@Amout", paymentModel.GetPaymentID);
-                    command.Parameters.AddWithValue("@CourseID", paymentModel.GetCourseId);
+                    command.Parameters.AddWithValue("@PaymentID", paymentModel.GetPaymentID());
+                    command.Parameters.AddWithValue("@BuyerName", paymentModel.GetBuyerName());
+                    command.Parameters.AddWithValue("@Description", paymentModel.GetDescription());
+                    command.Parameters.AddWithValue("@Amout", paymentModel.GetAmount());
+                    command.Parameters.AddWithValue("@CourseID", paymentModel.GetCourseId());
+                    command.Parameters.AddWithValue("@BuyerID", paymentModel.GetBuyerID());
+
                     var result = await command.ExecuteNonQueryAsync();
                     return result > 0;
                 }
@@ -2053,18 +2349,19 @@ namespace E_learning.DAL.Payment
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    var query = "SELECT PaymentID, buyerName, Description, Amout, CourseID FROM Payments";
+                    var query = "SELECT * FROM Payments";
                     var command = new SqlCommand(query, connection);
                     using (var reader = await command.ExecuteReaderAsync())
                     {
                         while (await reader.ReadAsync())
                         {
                             string paymentId = reader.GetString(reader.GetOrdinal("PaymentID"));
-                            string buyerName = reader.GetString(reader.GetOrdinal("buyerName"));
+                            string buyerName = reader.GetString(reader.GetOrdinal("BuyerName"));
                             string description = reader.GetString(reader.GetOrdinal("Description"));
                             decimal amount = reader.GetDecimal(reader.GetOrdinal("Amout"));
                             string courseId = reader.GetString(reader.GetOrdinal("CourseID"));
-                            var payment = new PaymentModel(paymentId, buyerName, description, amount, courseId);
+                            string buyerId = reader.GetString(reader.GetOrdinal("BuyerID"));
+                            var payment = new PaymentModel(paymentId, buyerName, description, amount, courseId,buyerId );
                             payments.Add(payment);
                         }
                     }
@@ -2127,6 +2424,7 @@ namespace E_learning.DTO.Auth
         [Required(ErrorMessage = "Last name is required")]
         public string LastName { get; set; }
 
+
         [Required(ErrorMessage = "User role is required")]
         [EnumDataType(typeof(UserRole), ErrorMessage = "Invalid User Role. Valid roles are Student, Lecturer, Admin.")]
         public string UserRole { get; set; } = "Student";
@@ -2148,7 +2446,7 @@ namespace E_learning.DTO.Course
         [Required(ErrorMessage = "IsCorrect field is required")]
         public bool IsCorrect { get; set; }
         [Required(ErrorMessage = "Quiz ID is required")]
-        public string QuizID { get; set; }
+        public string QuestionID { get; set; }
     }
 }
 
@@ -2170,7 +2468,8 @@ namespace E_learning.DTO.Course
         public decimal CoursePrice { get; set; }
         [Required(ErrorMessage = "Author is not null")]
         public string Author { get; set; }
-
+        [Required(ErrorMessage = "Course description is not null")]
+        public string CourseDescription { get; set; }
 
     }
 }
@@ -2189,6 +2488,19 @@ namespace E_learning.DTO.Course
         public string lessonTitle { get; set; }
         public string courseID { get; set; }
         public IFormFile videoFile { get; set; }
+    }
+}
+
+```
+
+### DTO\Course\QuestionDTO.cs
+```cs
+﻿namespace E_learning.DTO.Course
+{
+    public class QuestionDTO
+    {
+        public string questionContent { get; set; }
+        public string quizID { get; set; }
     }
 }
 
@@ -2235,7 +2547,7 @@ namespace E_learning.DTO.Course
         public double Amount { get; set; }
         public string OrderDescription { get; set; }
         public string Name { get; set; }
-
+        public string BuyerID { get; set; }
         public string courseId { get; set; }
     }
 }
@@ -2304,8 +2616,12 @@ namespace E_learning.DTO.Zoom
         private string ChoiceID { get; set; }
         private string ChoiceText { get; set; }
         private bool IsCorrect { get; set; }
-        private string QuizID { get; set; }
+        private string QuestionID { get; set; }
 
+        public string ChoiceId => ChoiceID;
+        public string Text => ChoiceText;
+        public bool Correct => IsCorrect;
+        public string QuestionId => QuestionID;
         public string GetChoiceID()
         {
             return ChoiceID;
@@ -2330,20 +2646,20 @@ namespace E_learning.DTO.Zoom
         {
             IsCorrect = isCorrect;
         }
-        public string GetQuizID()
+        public string getQuestionID()
         {
-            return QuizID;
+            return QuestionID;
         }
-        public void SetQuizID(string quizID)
+        public void setQuestionID(string questionID)
         {
-            QuizID = quizID;
+            QuestionID = questionID;
         }
-        public ChoiceModel(string choiceID, string choiceText, bool isCorrect, string quizID)
+        public ChoiceModel(string choiceID, string choiceText, bool isCorrect, string questionID)
         {
             ChoiceID = choiceID;
             ChoiceText = choiceText;
             IsCorrect = isCorrect;
-            QuizID = quizID;
+            QuestionID = questionID;
         }
 
     }
@@ -2357,50 +2673,47 @@ namespace E_learning.DTO.Zoom
 {
     public class CoursesModel
     {
+        // ✅ Private fields (được đóng gói)
         private string courseID { get; set; }
         private string courseName { get; set; }
         private decimal coursePrice { get; set; }
+        private string courseDescription { get; set; }
         private string authorID { get; set; }
 
-        public string GetCourseID()
-        {
-            return courseID;
-        }
-        public void SetCourseID(string courseID)
-        {
-            this.courseID = courseID;
-        }
-        public string GetCourseName()
-        {
-            return courseName;
-        }
-        public void SetCourseName(string courseName)
-        {
-            this.courseName = courseName;
-        }
-        public decimal GetCoursePrice()
-        {
-            return coursePrice;
-        }
-        public void SetCoursePrice(decimal coursePrice)
-        {
-            this.coursePrice = coursePrice;
-        }
-        public string GetAuthorID()
-        {
-            return authorID;
-        }
-        public void SetAuthorID(string authorID)
-        {
-            this.authorID = authorID;
-        }
-        public CoursesModel(string courseID, string courseName, decimal coursePrice, string authorID)
+        // ✅ Public properties chỉ để expose ra Web API
+        public string CourseID => courseID;
+        public string CourseName => courseName;
+        public decimal CoursePrice => coursePrice;
+        public string CourseDescription => courseDescription;
+        public string AuthorID => authorID;
+
+        // ✅ Getter/Setter methods (nếu bạn vẫn muốn sử dụng trong code)
+        public string GetCourseID() => courseID;
+        public void SetCourseID(string value) => courseID = value;
+
+        public string GetCourseName() => courseName;
+        public void SetCourseName(string value) => courseName = value;
+
+        public decimal GetCoursePrice() => coursePrice;
+        public void SetCoursePrice(decimal value) => coursePrice = value;
+
+        public string GetCourseDescription() => courseDescription;
+        public void SetCourseDescription(string value) => courseDescription = value;
+
+        public string GetAuthorID() => authorID;
+        public void SetAuthorID(string value) => authorID = value;
+
+        // ✅ Constructors
+        public CoursesModel(string courseID, string courseName, decimal coursePrice, string courseDescription, string authorID)
         {
             this.courseID = courseID;
             this.courseName = courseName;
             this.coursePrice = coursePrice;
+            this.courseDescription = courseDescription;
             this.authorID = authorID;
         }
+
+        public CoursesModel() { }
     }
 }
 
@@ -2417,6 +2730,12 @@ namespace E_learning.DTO.Zoom
         private string lessonURL { get; set; }
         private string courseID { get; set; }
 
+        // Public properties to expose the fields
+        public string LessonID => lessonID;
+        public string LessonTitle => lessonTitle;
+        public string LessonURL => lessonURL;
+        public string CourseID => courseID;
+        // Getter/Setter methods
         public string GetLessonID()
         {
             return lessonID;
@@ -2462,6 +2781,57 @@ namespace E_learning.DTO.Zoom
 
 ```
 
+### Model\Courses\QuestionModel.cs
+```cs
+﻿namespace E_learning.Model.Courses
+{
+    public class QuestionModel
+    {
+        private string QuestionID { get; set; }
+        private string QuestionContent { get; set; }
+        private string QuizID { get; set; }
+
+        // ✅ Public properties chỉ để expose ra Web API
+        public string questionId => QuestionID;
+        public string questionContent => QuestionContent;
+        public string quizId => QuizID;
+        // ✅ Getter/Setter methods (nếu bạn vẫn muốn sử dụng trong code)
+        public string GetQuestionID()
+        {
+            return QuestionID;
+        }
+        public void SetQuestionID(string questionID)
+        {
+            this.QuestionID = questionID;
+        }
+
+        public string GetQuestionContent()
+        {
+            return QuestionContent;
+        }
+        public void SetQuestionContent(string questionContent)
+        {
+            this.QuestionContent = questionContent;
+        }
+        public string GetQuizID()
+        {
+            return QuizID;
+        }
+        public void SetQuizID(string quizID)
+        {
+            this.QuizID = quizID;
+        }
+        public QuestionModel(string questionID, string questionContent, string quizID)
+        {
+            this.QuestionID = questionID;
+            this.QuestionContent = questionContent;
+            this.QuizID = quizID;
+        }
+    }
+}
+
+```
+
 ### Model\Courses\QuizModel.cs
 ```cs
 ﻿namespace E_learning.Model.Courses
@@ -2471,6 +2841,11 @@ namespace E_learning.DTO.Zoom
         private string quizID { get; set; }
         private string quizTitle { get; set; }
         private string courseID { get; set; }
+        // Public properties to expose to Web API
+        public string QuizID => quizID;
+        public string QuizTitle => quizTitle;
+        public string CourseID => courseID;
+        // Getter/Setter methods
         public string getQuizID()
         {
             return quizID;
@@ -2516,6 +2891,11 @@ namespace E_learning.DTO.Zoom
         private string userID { get; set; }
         private string courseID { get; set; }
 
+        // Public properties to expose data
+        public string EnrollmentID => enrollmenID;
+        public string UserID => userID;
+        public string CourseID => courseID;
+        // Getter/Setter methods
         public string GetEnrollmentID()
         {
             return enrollmenID;
@@ -2572,8 +2952,17 @@ namespace E_learning.DTO.Zoom
         private string BuyerName { get; set; }
         private string Description { get; set; }
         private decimal Amount { get; set; }
+        private string BuyerID { get; set; }
+        private string CourseId { get; set; }
 
-        private string courseId { get; set; }
+        // Public properties to expose data
+        public string PaymentId => PaymentID;
+        public string buyerName => BuyerName;
+        public string description => Description;
+        public decimal amount=> Amount;
+        public string BuyerId => BuyerID;
+        public string CourseID => CourseId;
+        // Getter and Setter methods for encapsulation
 
         public string GetPaymentID()
         {
@@ -2609,19 +2998,28 @@ namespace E_learning.DTO.Zoom
         }
         public string GetCourseId()
         {
-            return courseId;
+            return CourseId;
         }
         public void SetCourseId(string courseId)
         {
-            this.courseId = courseId;
+            CourseId = courseId;
         }
-        public PaymentModel(string paymentId, string buyerName, string description, decimal amount, string courseId)
+        public string GetBuyerID()
+        {
+            return BuyerID;
+        }
+        public void SetBuyerID(string buyerId)
+        {
+            BuyerID = buyerId;
+        }
+        public PaymentModel(string paymentId, string buyerName, string description, decimal amount, string courseId, string buyerId)
         {
             PaymentID = paymentId;
             BuyerName = buyerName;
             Description = description;
             Amount = amount;
-            this.courseId = courseId;
+            CourseId = courseId;
+            BuyerID = buyerId;
         }
     }
 }
@@ -2642,6 +3040,7 @@ namespace E_learning.Model.Users
         public string Email { get; set; }
         public string FirstName { get; set; }
         public string LastName { get; set; }
+        public string FullName { get; set; }
         public UserRole UserRole { get; set; }
     }
 }
@@ -2718,15 +3117,15 @@ namespace E_learning.Repositories.Auth
                         {
                             case UserRole.Student:
                                 string studentID = _generateID.generateStudentID();
-                                await _authDAL.AddStudentAsync(studentID, user.UserID, connection, transaction);
+                                await _authDAL.AddStudentAsync(user.UserID, connection, transaction);
                                 break;
                             case UserRole.Lecturer:
                                 string lecturerID = _generateID.generateLecturerID();
-                                await _authDAL.AddLecturerAsync(lecturerID, user.UserID, connection, transaction);
+                                await _authDAL.AddLecturerAsync(user.UserID, connection, transaction);
                                 break;
                             case UserRole.Admin:
                                 string adminID = _generateID.generateAdminID();
-                                await _authDAL.AddAdminAsync(adminID, user.UserID, connection, transaction);
+                                await _authDAL.AddAdminAsync(user.UserID, connection, transaction);
                                 break;
                             default:
                                 throw new Exception($"Invalid user role for database insertion: {user.UserRole}");
@@ -2781,17 +3180,21 @@ namespace E_learning.Repositories.Course
         private readonly LessonDAL _lessonDAL;
         private readonly QuizDAL _quizDAL;
         private readonly ChoiceDAL _choiceDAL;
+        private readonly QuestionDAL _questionDAL;
 
         public CourseRepository(
             CoursesDAL coursesDAL,
             LessonDAL lessonDAL,
             QuizDAL quizDAL,
-            ChoiceDAL choiceDAL)
+            ChoiceDAL choiceDAL,
+            QuestionDAL questionDAL)
         {
             _coursesDAL = coursesDAL;
             _lessonDAL = lessonDAL;
             _quizDAL = quizDAL;
             _choiceDAL = choiceDAL;
+            _questionDAL = questionDAL;
+
         }
         // Course methods
         public Task<List<CoursesModel>> GetAllCourses() => _coursesDAL.getAllCourse();
@@ -2814,6 +3217,13 @@ namespace E_learning.Repositories.Course
         public Task<bool> DeleteChoice(string choiceID) => _choiceDAL.deleteChoice(choiceID);
         public Task<bool> InsertChoice(ChoiceModel choice) => _choiceDAL.InsertChoice(choice);
         public Task<List<ChoiceModel>> getAllChoice() => _choiceDAL.getAllChoice();
+        // Question methods
+        public Task<List<QuestionModel>> GetQuestionsByQuizID(string quizID) => _questionDAL.GetQuestionsByQuizID(quizID);
+        public Task<bool> DeleteQuestion(string questionID) => _questionDAL.DeleteQuestion(questionID);
+        public Task<bool> InsertQuestion(QuestionModel question) => _questionDAL.InsertQuestion(question);
+        public Task<List<QuestionModel>> getALLQuestion() => _questionDAL.getALLQuestion();
+
+     
     }
 }
 
@@ -2852,6 +3262,11 @@ namespace E_learning.Repositories.Course
             Task<bool> DeleteChoice(string choiceID);
             Task<bool> InsertChoice(ChoiceModel choice);
             Task<List<ChoiceModel>> getAllChoice();
+        // Questions
+        Task<List<QuestionModel>> getALLQuestion();
+        Task<bool> InsertQuestion(QuestionModel question);
+        Task<bool> DeleteQuestion(string questionID);
+        Task<List<QuestionModel>> GetQuestionsByQuizID(string quizID);
 
     }
 }
@@ -3026,9 +3441,15 @@ namespace E_learning.Services
             string numberString = generateID();
             return $"PID{numberString}";
         }
+        public string GenerateQuestionID()
+        {
+            string numberString = generateID();
+            return $"QTID{numberString}";
+        }
 
     }
 }
+
 ```
 
 ### Services\IZoomService.cs
@@ -3044,6 +3465,133 @@ namespace E_learning.Services
         Task<string> TestTokenGenerationAsync();
     }
 }
+```
+
+### Services\Normalize.cs
+```cs
+﻿using System.Text.RegularExpressions;
+using System.Text;
+using Microsoft.AspNetCore.Http.HttpResults;
+using System.Runtime.Intrinsics.X86;
+
+namespace E_learning.Services
+{
+    public class Normalize
+    {
+        public static string RemoveDiacritics(string text)
+        {
+            string normalized = text.Normalize(NormalizationForm.FormD);
+            Regex regex = new Regex("\\p{IsCombiningDiacriticalMarks}+");
+            return regex.Replace(normalized, "")
+                        .Replace('đ', 'd')
+                        .Replace('Đ', 'D');
+        }
+    }
+}
+
+
+//use E_Learning;
+
+//CREATE TABLE Users (
+//    UserID nvarchar(25) PRIMARY KEY,
+//    Username nvarchar(25),
+//    Password nvarchar(255),
+//    Email nvarchar(25),
+//    FirstName nvarchar(25),
+//    LastName nvarchar(25),
+//    FullName nvarchar(25),
+//    UserRole nvarchar(25),
+//    CreateAt datetime DEFAULT GETDATE()
+//);
+
+//CREATE TABLE Admin (
+//    UserID nvarchar(25) PRIMARY KEY,
+//    FOREIGN KEY (UserID) REFERENCES Users(UserID)
+//);
+
+//CREATE TABLE Lecturers (
+//    UserID nvarchar(25) PRIMARY KEY,
+//    FOREIGN KEY (UserID) REFERENCES Users(UserID)
+//);
+
+//CREATE TABLE Students (
+//    UserID nvarchar(25) PRIMARY KEY,
+//    FOREIGN KEY (UserID) REFERENCES Users(UserID)
+//);
+
+//CREATE TABLE Courses (
+//    CourseID nvarchar(25) PRIMARY KEY,
+//    CourseName nvarchar(25),
+//    CoursePrice decimal,
+//    CourseDescription nvarchar(25),
+//    AuthorID nvarchar(25),
+//    CreateAt datetime DEFAULT GETDATE(),
+//    FOREIGN KEY (AuthorID) REFERENCES Lecturers(UserID)
+//);
+
+//CREATE TABLE Enrollments (
+//    EnrolmentID nvarchar(25) PRIMARY KEY,
+//    StudentID nvarchar(25),
+//    CourseID nvarchar(25),
+//    CreateAt datetime DEFAULT GETDATE(),
+//    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID),
+//    FOREIGN KEY (StudentID) REFERENCES Students(UserID)
+//);
+
+//CREATE TABLE Lessons (
+//    LessonID nvarchar(25) PRIMARY KEY,
+//    LessonTitle nvarchar(25),
+//    LessonURL nvarchar(255),
+//    CreateAt datetime DEFAULT GETDATE(),
+//    CourseID nvarchar(25),
+//    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
+//);
+
+//CREATE TABLE Quiz (
+//    QuizID nvarchar(25) PRIMARY KEY,
+//    QuizTitle nvarchar(25),
+//    CreateAt datetime DEFAULT GETDATE(),
+//    CourseID nvarchar(25),
+//    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
+//);
+
+//CREATE TABLE Question (
+//    QuestionID nvarchar(25) PRIMARY KEY,
+//    QuestionContent nvarchar(255),
+//    CreateAt datetime DEFAULT GETDATE(),
+//    QuizID nvarchar(25),
+//    FOREIGN KEY (QuizID) REFERENCES Quiz(QuizID)
+//);
+
+//CREATE TABLE Choice (
+//    ChoiceID nvarchar(25) PRIMARY KEY,
+//    ChoiceText nvarchar(25),
+//    isCorrect bit,
+//    QuestionID nvarchar(25),
+//    CreateAt datetime DEFAULT GETDATE(),
+//    FOREIGN KEY (QuestionID) REFERENCES Question(QuestionID)
+//);
+
+//CREATE TABLE Payment (
+//    PaymentID nvarchar(25) PRIMARY KEY,
+//    Price decimal,
+//    PaymentStatus nvarchar(25),
+//    BuyerID nvarchar(25),
+//    CourseID nvarchar(25),
+//    CreateAt datetime DEFAULT GETDATE(),
+//    FOREIGN KEY (BuyerID) REFERENCES Users(UserID),
+//    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
+//);
+
+//CREATE TABLE MeetingRoom (
+//    RoomID nvarchar(25) PRIMARY KEY,
+//    RoomName nvarchar(25),
+//    RoomURL nvarchar(255),
+//    CreateAt datetime DEFAULT GETDATE(),
+//    CreatorID nvarchar(25),
+//    FOREIGN KEY (CreatorID) REFERENCES Users(UserID)
+//);
+
 ```
 
 ### Services\ZoomService.cs
@@ -3454,16 +4002,17 @@ namespace E_learning.Services.VNPay
         {
             _configuration = configuration;
         }
-        public string CreatePaymentUrl(PaymentRequestDTO model, HttpContext context, string courseID)
+
+        public string CreatePaymentUrl(PaymentRequestDTO model, HttpContext context, string courseID, string BuyerID)
         {
             var timeZoneById = TimeZoneInfo.FindSystemTimeZoneById(_configuration["TimeZoneId"]);
             var timeNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZoneById);
             var tick = DateTime.Now.Ticks.ToString();
             var pay = new VnPayLibrary();
-
-
+            string Name = Normalize.RemoveDiacritics(model.Name);
+            string Oder_description = Normalize.RemoveDiacritics(model.OrderDescription);
             var urlCallBack = _configuration["Vnpay:PaymentBackReturnUrl"];
-            urlCallBack += $"?courseId={courseID}";
+            urlCallBack += $"?courseId={courseID}&buyerId={BuyerID}";
             var expireDate = timeNow.AddMinutes(15).ToString("yyyyMMddHHmmss");
             pay.AddRequestData("vnp_Version", _configuration["Vnpay:Version"]);
             pay.AddRequestData("vnp_Command", _configuration["Vnpay:Command"]);
@@ -3473,7 +4022,8 @@ namespace E_learning.Services.VNPay
             pay.AddRequestData("vnp_CurrCode", _configuration["Vnpay:CurrCode"]);
             pay.AddRequestData("vnp_IpAddr", pay.GetIpAddress(context));
             pay.AddRequestData("vnp_Locale", _configuration["Vnpay:Locale"]);
-            pay.AddRequestData("vnp_OrderInfo", $"{model.Name}|{model.OrderDescription}-{model.Amount}");
+            pay.AddRequestData("vnp_OrderInfo", $"{Name}|{Oder_description}-{model.Amount}");
+
             pay.AddRequestData("vnp_OrderType", model.OrderType);
             pay.AddRequestData("vnp_ReturnUrl", urlCallBack);
             pay.AddRequestData("vnp_TxnRef", tick);
@@ -3484,7 +4034,6 @@ namespace E_learning.Services.VNPay
 
             return paymentUrl;
         }
-
 
         public PaymentResponseDTO PaymentExecute(IQueryCollection collections)
         {

@@ -16,7 +16,7 @@ namespace E_learning.Controllers.Payment
         private readonly ILogger<PaymentController> _logger;
         private readonly GenerateID _generateID;
         private readonly CheckExsistingID _checkExsistingID;
-        public PaymentController(VnPayService vnPayService, ILogger<PaymentController> logger,GenerateID generateID, CheckExsistingID checkExsistingID, IPaymentRepository paymentRepository )
+        public PaymentController(VnPayService vnPayService, ILogger<PaymentController> logger, GenerateID generateID, CheckExsistingID checkExsistingID, IPaymentRepository paymentRepository)
         {
             _vnPayService = vnPayService;
             _logger = logger;
@@ -33,8 +33,8 @@ namespace E_learning.Controllers.Payment
 
             try
             {
-                var paymentUrl = _vnPayService.CreatePaymentUrl(model, HttpContext, model.courseId);
-                Console.WriteLine("Payment URL: " + model.courseId);
+                var paymentUrl = _vnPayService.CreatePaymentUrl(model, HttpContext, model.courseId, model.BuyerID);
+
                 return Ok(new
                 {
                     success = true,
@@ -52,16 +52,16 @@ namespace E_learning.Controllers.Payment
         }
 
         [HttpGet("vnpay-return")]
-        public async Task<IActionResult> VNPayReturn([FromQuery] string courseId)
+        public async Task<IActionResult> VNPayReturn([FromQuery] string courseId, [FromQuery] string buyerId)
         {
             var response = _vnPayService.PaymentExecute(HttpContext.Request.Query);
             Console.WriteLine("Response: " + response.OrderInfo);
-            //string newPaymentID = await _checkExsistingID.GenerateUniqueID(
-            //    _paymentRepository.getAllPaymentAsync,
-            //    r => r.GetPaymentID(),
-            //    _generateID.GeneratePaymentID
-            //);
-            string newPaymentID = "123";
+            string newPaymentID = await _checkExsistingID.GenerateUniqueID(
+                _paymentRepository.getAllPaymentAsync,
+                r => r.GetPaymentID(),
+                _generateID.GeneratePaymentID
+            );
+
             string[] name_desc_amout = response.OrderInfo.Split('|');
             string[] desc_amout = name_desc_amout[1].Split('-');
             string buyerName = name_desc_amout[0];
@@ -79,28 +79,30 @@ namespace E_learning.Controllers.Payment
                     buyerName,
                     orderDescription,
                     orderAmount,
-                    courseID
+                    courseID,
+                    buyerId
                 );
-                //bool isSaved = await _paymentRepository.SavePaymentAsync(paymentModel);
-                //if (!isSaved)
-                //{
-                //    _logger.LogError("Failed to save payment information for course ID: {CourseID}", courseID);
-                //    return StatusCode(500, "Failed to save payment information.");
-                //}
-                    return Ok(new
+                bool isSaved = await _paymentRepository.SavePaymentAsync(paymentModel);
+                if (!isSaved)
+                {
+                    _logger.LogError("Failed to save payment information for course ID: {CourseID}", courseID);
+                    return StatusCode(500, "Failed to save payment information.");
+                }
+                return Ok(new
+                {
+                    success = true,
+                    message = "Thanh toán thành công",
+                    Object = new
                     {
-                        success = true,
-                        message = "Thanh toán thành công",
-                        Object = new
-                        {
-                            PaymentID = newPaymentID,
-                            BuyerName = buyerName,
-                            OrderDescription = orderDescription,
-                            OrderAmount = orderAmount,
-                            CourseID = courseID
-                        }
-                    });
-                
+                        PaymentID = newPaymentID,
+                        BuyerName = buyerName,
+                        OrderDescription = orderDescription,
+                        OrderAmount = orderAmount,
+                        CourseID = courseID,
+                        BuyerID = buyerId
+                    }
+                });
+
             }
             else
             {
@@ -108,9 +110,32 @@ namespace E_learning.Controllers.Payment
                 {
                     success = false,
                     message = "Thanh toán thất bại",
-                  
+
                 });
             }
+        }
+
+        [HttpGet("getAllPayment")]
+        [ProducesResponseType(typeof(IEnumerable<PaymentModel>), statusCode: 200)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetAllPayment()
+        {
+            try
+            {
+                var payments = await _paymentRepository.getAllPaymentAsync();
+                if (payments == null || !payments.Any())
+                {
+                    return NotFound("No payments found");
+                }
+                return Ok(payments);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all payments");
+                return StatusCode(500, "Internal server error");
+            }
+
         }
     }
 }

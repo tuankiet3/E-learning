@@ -10,17 +10,21 @@ namespace E_learning.Repositories.Course
         private readonly LessonDAL _lessonDAL;
         private readonly QuizDAL _quizDAL;
         private readonly ChoiceDAL _choiceDAL;
+        private readonly QuestionDAL _questionDAL;
 
         public CourseRepository(
             CoursesDAL coursesDAL,
             LessonDAL lessonDAL,
             QuizDAL quizDAL,
-            ChoiceDAL choiceDAL)
+            ChoiceDAL choiceDAL,
+            QuestionDAL questionDAL)
         {
             _coursesDAL = coursesDAL;
             _lessonDAL = lessonDAL;
             _quizDAL = quizDAL;
             _choiceDAL = choiceDAL;
+            _questionDAL = questionDAL;
+
         }
         // Course methods
         public Task<List<CoursesModel>> GetAllCourses() => _coursesDAL.getAllCourse();
@@ -43,6 +47,13 @@ namespace E_learning.Repositories.Course
         public Task<bool> DeleteChoice(string choiceID) => _choiceDAL.deleteChoice(choiceID);
         public Task<bool> InsertChoice(ChoiceModel choice) => _choiceDAL.InsertChoice(choice);
         public Task<List<ChoiceModel>> getAllChoice() => _choiceDAL.getAllChoice();
+        // Question methods
+        public Task<List<QuestionModel>> GetQuestionsByQuizID(string quizID) => _questionDAL.GetQuestionsByQuizID(quizID);
+        public Task<bool> DeleteQuestion(string questionID) => _questionDAL.DeleteQuestion(questionID);
+        public Task<bool> InsertQuestion(QuestionModel question) => _questionDAL.InsertQuestion(question);
+        public Task<List<QuestionModel>> getALLQuestion() => _questionDAL.getALLQuestion();
+
+     
     }
 }
 

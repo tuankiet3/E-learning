@@ -28,6 +28,11 @@ namespace E_learning.Repositories.Course
             Task<bool> DeleteChoice(string choiceID);
             Task<bool> InsertChoice(ChoiceModel choice);
             Task<List<ChoiceModel>> getAllChoice();
+        // Questions
+        Task<List<QuestionModel>> getALLQuestion();
+        Task<bool> InsertQuestion(QuestionModel question);
+        Task<bool> DeleteQuestion(string questionID);
+        Task<List<QuestionModel>> GetQuestionsByQuizID(string quizID);
 
     }
 }

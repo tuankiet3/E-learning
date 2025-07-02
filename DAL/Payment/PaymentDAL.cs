@@ -7,9 +7,9 @@ namespace E_learning.DAL.Payment
     {
         private readonly string _connectionString;
         private readonly ILogger<PaymentDAL> _logger;
-        public PaymentDAL(string connectionString, ILogger<PaymentDAL> logger)
+        public PaymentDAL(IConfiguration configuration, ILogger<PaymentDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
 
@@ -20,13 +20,18 @@ namespace E_learning.DAL.Payment
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    var query = "INSERT INTO Payments (PaymentID, buyerName, Description, Amout, CourseID) VALUES (@PaymentID, @buyerName, @Description, @Amout, @CourseID)";
+
+                    var query = @"INSERT INTO Payments (PaymentID, BuyerName, Description, Amout, CourseID, BuyerID) VALUES 
+                    (@PaymentID, @BuyerName, @Description, @Amout, @CourseID, @BuyerID)";
+
                     var command = new SqlCommand(query, connection);
-                    command.Parameters.AddWithValue("@PaymentID", paymentModel.GetPaymentID);
-                    command.Parameters.AddWithValue("@buyerName", paymentModel.GetBuyerName);
-                    command.Parameters.AddWithValue("@Description", paymentModel.GetDescription);
-                    command.Parameters.AddWithValue("@Amout", paymentModel.GetPaymentID);
-                    command.Parameters.AddWithValue("@CourseID", paymentModel.GetCourseId);
+                    command.Parameters.AddWithValue("@PaymentID", paymentModel.GetPaymentID());
+                    command.Parameters.AddWithValue("@BuyerName", paymentModel.GetBuyerName());
+                    command.Parameters.AddWithValue("@Description", paymentModel.GetDescription());
+                    command.Parameters.AddWithValue("@Amout", paymentModel.GetAmount());
+                    command.Parameters.AddWithValue("@CourseID", paymentModel.GetCourseId());
+                    command.Parameters.AddWithValue("@BuyerID", paymentModel.GetBuyerID());
+
                     var result = await command.ExecuteNonQueryAsync();
                     return result > 0;
                 }
@@ -46,18 +51,19 @@ namespace E_learning.DAL.Payment
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    var query = "SELECT PaymentID, buyerName, Description, Amout, CourseID FROM Payments";
+                    var query = "SELECT * FROM Payments";
                     var command = new SqlCommand(query, connection);
                     using (var reader = await command.ExecuteReaderAsync())
                     {
                         while (await reader.ReadAsync())
                         {
                             string paymentId = reader.GetString(reader.GetOrdinal("PaymentID"));
-                            string buyerName = reader.GetString(reader.GetOrdinal("buyerName"));
+                            string buyerName = reader.GetString(reader.GetOrdinal("BuyerName"));
                             string description = reader.GetString(reader.GetOrdinal("Description"));
                             decimal amount = reader.GetDecimal(reader.GetOrdinal("Amout"));
                             string courseId = reader.GetString(reader.GetOrdinal("CourseID"));
-                            var payment = new PaymentModel(paymentId, buyerName, description, amount, courseId);
+                            string buyerId = reader.GetString(reader.GetOrdinal("BuyerID"));
+                            var payment = new PaymentModel(paymentId, buyerName, description, amount, courseId,buyerId );
                             payments.Add(payment);
                         }
                     }

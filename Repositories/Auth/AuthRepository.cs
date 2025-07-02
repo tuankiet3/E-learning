@@ -35,15 +35,15 @@ namespace E_learning.Repositories.Auth
                         {
                             case UserRole.Student:
                                 string studentID = _generateID.generateStudentID();
-                                await _authDAL.AddStudentAsync(studentID, user.UserID, connection, transaction);
+                                await _authDAL.AddStudentAsync(user.UserID, connection, transaction);
                                 break;
                             case UserRole.Lecturer:
                                 string lecturerID = _generateID.generateLecturerID();
-                                await _authDAL.AddLecturerAsync(lecturerID, user.UserID, connection, transaction);
+                                await _authDAL.AddLecturerAsync(user.UserID, connection, transaction);
                                 break;
                             case UserRole.Admin:
                                 string adminID = _generateID.generateAdminID();
-                                await _authDAL.AddAdminAsync(adminID, user.UserID, connection, transaction);
+                                await _authDAL.AddAdminAsync(user.UserID, connection, transaction);
                                 break;
                             default:
                                 throw new Exception($"Invalid user role for database insertion: {user.UserRole}");

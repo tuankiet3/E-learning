@@ -3,25 +3,22 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using E_learning.Model.Courses;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
-    //public LessonDAL(IConfiguration configuration, ILogger<LessonDAL> logger)
-    //{
-    //    _connectionString = configuration.GetConnectionString("SqlServerConnection");
-    //    _logger = logger;
-    //}
+  
     public class ChoiceDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<ChoiceDAL> _logger;
 
-        public ChoiceDAL(string connectionString, ILogger<ChoiceDAL> logger)
+        public ChoiceDAL(IConfiguration configuration, ILogger<ChoiceDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         // lấy toàn bô choices theo quizID
-        public async Task<List<ChoiceModel>> GetChoicesByQuizID(string quizID)
+        public async Task<List<ChoiceModel>> GetChoicesByQuizID(string QuestionID)
         {
             List<ChoiceModel> choices = new List<ChoiceModel>();
             try
@@ -29,10 +26,10 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Choices WHERE QuizID = @QuizID";
+                    string query = "SELECT * FROM Choices WHERE QuestionID = @QuestionID";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
-                        command.Parameters.AddWithValue("@QuizID", quizID);
+                        command.Parameters.AddWithValue("@QuestionID", QuestionID);
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
                         {
                             while (await reader.ReadAsync())
@@ -40,7 +37,7 @@ namespace E_learning.DAL.Course
                                 string choiceID = reader.GetString(reader.GetOrdinal("ChoiceID"));
                                 string choiceText = reader.GetString(reader.GetOrdinal("ChoiceText"));
                                 bool isCorrect = reader.GetBoolean(reader.GetOrdinal("IsCorrect"));
-                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, quizID);
+                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, QuestionID);
                                 choices.Add(choice);
                             }
                         }
@@ -49,7 +46,7 @@ namespace E_learning.DAL.Course
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving choices for quiz ID: {QuizID}", quizID);
+                _logger.LogError(ex, "Error retrieving choices for quiz ID: {QuestionID}", QuestionID);
             }
             return choices;
         }
@@ -84,13 +81,13 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "INSERT INTO Choices (ChoiceID, ChoiceText, IsCorrect, QuizID) VALUES (@ChoiceID, @ChoiceText, @IsCorrect, @QuizID)";
+                    string query = "INSERT INTO Choices (ChoiceID, ChoiceText, IsCorrect, QuestionID) VALUES (@ChoiceID, @ChoiceText, @IsCorrect, @QuestionID)";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@ChoiceID", choice.GetChoiceID());
                         command.Parameters.AddWithValue("@ChoiceText", choice.GetChoiceText());
                         command.Parameters.AddWithValue("@IsCorrect", choice.GetIsCorrect());
-                        command.Parameters.AddWithValue("@QuizID", choice.GetQuizID());
+                        command.Parameters.AddWithValue("@QuestionID", choice.getQuestionID());
                         int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
                     }
@@ -121,8 +118,8 @@ namespace E_learning.DAL.Course
                                 string choiceID = reader.GetString(reader.GetOrdinal("ChoiceID"));
                                 string choiceText = reader.GetString(reader.GetOrdinal("ChoiceText"));
                                 bool isCorrect = reader.GetBoolean(reader.GetOrdinal("IsCorrect"));
-                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
-                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, quizID);
+                                string QuestionID = reader.GetString(reader.GetOrdinal("QuestionID"));
+                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, QuestionID);
                                 choices.Add(choice);
                             }
                         }

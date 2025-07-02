@@ -3,15 +3,16 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using E_learning.Model.Courses;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
     public class QuizDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<QuizDAL> _logger;
-        public QuizDAL(string connectionString, ILogger<QuizDAL> logger)
+        public QuizDAL(IConfiguration configuration, ILogger<QuizDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         // Lấy toàn bộ quiz theo CourseID

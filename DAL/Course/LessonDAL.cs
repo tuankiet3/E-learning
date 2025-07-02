@@ -3,15 +3,16 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using E_learning.Model.Courses;
+using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
     public class LessonDAL
     {
         private readonly string _connectionString;
         private readonly ILogger<LessonDAL> _logger;
-        public LessonDAL(string connectionString, ILogger<LessonDAL> logger)
+        public LessonDAL(IConfiguration configuration, ILogger<LessonDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
         // Lấy toàn bộ bài học theo CourseID

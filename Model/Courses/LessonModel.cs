@@ -7,6 +7,12 @@
         private string lessonURL { get; set; }
         private string courseID { get; set; }
 
+        // Public properties to expose the fields
+        public string LessonID => lessonID;
+        public string LessonTitle => lessonTitle;
+        public string LessonURL => lessonURL;
+        public string CourseID => courseID;
+        // Getter/Setter methods
         public string GetLessonID()
         {
             return lessonID;

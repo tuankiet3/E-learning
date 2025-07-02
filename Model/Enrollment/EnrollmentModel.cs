@@ -6,6 +6,11 @@
         private string userID { get; set; }
         private string courseID { get; set; }
 
+        // Public properties to expose data
+        public string EnrollmentID => enrollmenID;
+        public string UserID => userID;
+        public string CourseID => courseID;
+        // Getter/Setter methods
         public string GetEnrollmentID()
         {
             return enrollmenID;

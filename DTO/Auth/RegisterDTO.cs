@@ -23,6 +23,7 @@ namespace E_learning.DTO.Auth
         [Required(ErrorMessage = "Last name is required")]
         public string LastName { get; set; }
 
+
         [Required(ErrorMessage = "User role is required")]
         [EnumDataType(typeof(UserRole), ErrorMessage = "Invalid User Role. Valid roles are Student, Lecturer, Admin.")]
         public string UserRole { get; set; } = "Student";

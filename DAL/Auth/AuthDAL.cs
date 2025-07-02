@@ -1,6 +1,7 @@
 ﻿using E_learning.Enums;
 using E_learning.Model.Users;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 
 namespace E_learning.DAL.Auth
 {
@@ -9,9 +10,9 @@ namespace E_learning.DAL.Auth
         private readonly string _connectionString;
         private readonly ILogger<AuthDAL> _logger;
 
-        public AuthDAL(string connectionString, ILogger<AuthDAL> logger)
+        public AuthDAL(IConfiguration configuration, ILogger<AuthDAL> logger)
         {
-            _connectionString = connectionString;
+            _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
 
@@ -32,7 +33,6 @@ namespace E_learning.DAL.Auth
                             if (await reader.ReadAsync())
                             {
                                 Enum.TryParse<UserRole>(reader.GetString(reader.GetOrdinal("UserRole")), true, out var role);
-
                                 user = new UserModel
                                 {
                                     UserID = reader.GetString(reader.GetOrdinal("UserID")),
@@ -41,6 +41,7 @@ namespace E_learning.DAL.Auth
                                     Email = reader.GetString(reader.GetOrdinal("Email")),
                                     FirstName = reader.GetString(reader.GetOrdinal("FirstName")),
                                     LastName = reader.GetString(reader.GetOrdinal("LastName")),
+                                    FullName = $"{reader.GetString(reader.GetOrdinal("FirstName"))} {reader.GetString(reader.GetOrdinal("LastName"))}",
                                     UserRole = role
                                 };
                             }
@@ -73,15 +74,14 @@ namespace E_learning.DAL.Auth
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking if username exists: {Username}", username);
-                return true; 
+                return true;
             }
         }
 
         public async Task AddUserAsync(UserModel user, SqlConnection connection, SqlTransaction transaction)
         {
-            string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, UserRole) 
-                             VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName, @UserRole)";
-
+            string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, FullName, UserRole) 
+                             VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName, @FullName, @UserRole)";
             using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
                 command.Parameters.AddWithValue("@UserID", user.UserID);
@@ -90,39 +90,36 @@ namespace E_learning.DAL.Auth
                 command.Parameters.AddWithValue("@Email", user.Email);
                 command.Parameters.AddWithValue("@FirstName", user.FirstName);
                 command.Parameters.AddWithValue("@LastName", user.LastName);
-                // THAY ĐỔI: Chuyển enum thành chuỗi để lưu vào DB
+                command.Parameters.AddWithValue("@FullName", user.FullName);
                 command.Parameters.AddWithValue("@UserRole", user.UserRole.ToString());
                 await command.ExecuteNonQueryAsync();
             }
         }
 
-        public async Task AddStudentAsync(string studentID, string userID, SqlConnection connection, SqlTransaction transaction)
+        public async Task AddStudentAsync(string userID, SqlConnection connection, SqlTransaction transaction)
         {
-            string query = "INSERT INTO Students (StudentID, UserID) VALUES (@StudentID, @UserID)";
+            string query = "INSERT INTO Students (UserID) VALUES (@UserID)";
             using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                command.Parameters.AddWithValue("@StudentID", studentID);
                 command.Parameters.AddWithValue("@UserID", userID);
                 await command.ExecuteNonQueryAsync();
             }
         }
 
-        public async Task AddLecturerAsync(string lecturerID, string userID, SqlConnection connection, SqlTransaction transaction)
+        public async Task AddLecturerAsync(string userID, SqlConnection connection, SqlTransaction transaction)
         {
-            string query = "INSERT INTO Lecturers (LecturerID, UserID) VALUES (@LecturerID, @UserID)";
+            string query = "INSERT INTO Lecturers (UserID) VALUES (@UserID)";
             using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                command.Parameters.AddWithValue("@LecturerID", lecturerID);
                 command.Parameters.AddWithValue("@UserID", userID);
                 await command.ExecuteNonQueryAsync();
             }
         }
-        public async Task AddAdminAsync(string adminID, string userID, SqlConnection connection, SqlTransaction transaction)
+        public async Task AddAdminAsync(string userID, SqlConnection connection, SqlTransaction transaction)
         {
-            string query = "INSERT INTO Admin (AdminID, UserID) VALUES (@AdminID, @UserID)";
+            string query = "INSERT INTO Admin (UserID) VALUES (@UserID)";
             using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                command.Parameters.AddWithValue("@AdminID", adminID);
                 command.Parameters.AddWithValue("@UserID", userID);
                 await command.ExecuteNonQueryAsync();
             }
