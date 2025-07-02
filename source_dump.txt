@@ -52,8 +52,6 @@ E-learning/
 │   │   └── QuizModel.cs
 │   ├── Enrollment/
 │   │   └── EnrollmentModel.cs
-│   ├── Meeting/
-│   │   └── MeetingModel.cs
 │   ├── Message/
 │   │   └── MessageModel.cs
 │   ├── Payment/
@@ -101,23 +99,22 @@ E-learning/
 
 ### Program.cs
 ```cs
-﻿using E_learning.DAL.Course;
-using E_learning.DAL.Auth;
+﻿using E_learning.DAL.Auth;
+using E_learning.DAL.Course;
+using E_learning.Repositories.Auth;
+using E_learning.Repositories.Course;
 using E_learning.Services;
+using E_learning.Services.VNPay;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using Microsoft.OpenApi.Models;
-using E_learning.Repositories.Course;
-using E_learning.Services.VNPay;
-using E_learning.Repositories.Auth;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Lấy chuỗi kết nối
 var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection");
-// Đăng kí VNPayService
-builder.Services.AddScoped<VnPayService>();
+
 // Đăng ký các DAL
 builder.Services.AddSingleton(provider => new CoursesDAL(connectionString, provider.GetRequiredService<ILogger<CoursesDAL>>()));
 builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provider.GetRequiredService<ILogger<LessonDAL>>()));
@@ -125,17 +122,21 @@ builder.Services.AddSingleton(provider => new QuizDAL(connectionString, provider
 builder.Services.AddSingleton(provider => new ChoiceDAL(connectionString, provider.GetRequiredService<ILogger<ChoiceDAL>>()));
 builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider.GetRequiredService<ILogger<AuthDAL>>()));
 
-
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<GenerateID>();
-builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IZoomService, ZoomService>();
+builder.Services.AddScoped<VnPayService>();
 
+// Cấu hình HttpClientFactory cho Zoom
+builder.Services.AddHttpClient("Zoom", client =>
+{
+    client.BaseAddress = new Uri("https://api.zoom.us/v2/");
+});
 
-// === CẤU HÌNH JWT AUTHENTICATION ===
+// Cấu hình JWT Authentication
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -155,14 +156,12 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// === THAY THẾ CẤU HÌNH SWAGGERGEN TẠI ĐÂY ===
+// Cấu hình Swagger
 builder.Services.AddSwaggerGen(options =>
 {
-    // 1. Định nghĩa Security Scheme (cách xác thực)
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -172,8 +171,6 @@ builder.Services.AddSwaggerGen(options =>
         In = ParameterLocation.Header,
         Description = "Enter 'Bearer' [space] and then your valid token in the text input below.\n\nExample: \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\""
     });
-
-    // 2. Thêm Security Requirement (yêu cầu xác thực)
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -189,7 +186,6 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
-// ============================================
 
 var app = builder.Build();
 
@@ -200,10 +196,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
@@ -327,7 +321,6 @@ namespace E_learning.Controllers
 ### Controllers\MeetingController.cs
 ```cs
 ﻿using E_learning.DTO.Zoom;
-using E_learning.Enums;
 using E_learning.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -341,30 +334,57 @@ namespace E_learning.Controllers
     public class MeetingController : ControllerBase
     {
         private readonly IZoomService _zoomService;
+        private readonly ILogger<MeetingController> _logger;
 
-        public MeetingController(IZoomService zoomService)
+        public MeetingController(IZoomService zoomService, ILogger<MeetingController> logger)
         {
             _zoomService = zoomService;
+            _logger = logger;
         }
 
         [HttpPost("create")]
         public async Task<IActionResult> CreateZoomMeeting([FromBody] CreateMeetingDTO meetingDto)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var email = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(email))
+            {
+                _logger.LogWarning("User email not found in JWT token.");
+                return BadRequest(new { success = false, message = "User email not found in token." });
+            }
+            if (DateTime.TryParse(meetingDto.StartTime, out var startTime) && startTime <= DateTime.UtcNow)
+            {
+                return BadRequest(new { success = false, message = "Meeting start time must be in the future." });
+            }
+
             try
             {
-                var email = User.FindFirstValue(ClaimTypes.Email);
-                if (string.IsNullOrEmpty(email))
-                {
-                    return BadRequest("User email not found in token.");
-                }
-
+                _logger.LogInformation("Attempting to create Zoom meeting for user {Email}", email);
                 var meetingResponse = await _zoomService.CreateMeetingAsync(meetingDto, email);
-                return Ok(meetingResponse);
+                _logger.LogInformation("Successfully created Zoom meeting with ID {MeetingId} for user {Email}", meetingResponse?.Id, email);
+
+                return Ok(new { success = true, data = meetingResponse });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"An error occurred: {ex.Message}");
+                _logger.LogError(ex, "An unhandled exception occurred while creating a Zoom meeting for {Email}", email);
+                return StatusCode(500, new { success = false, message = "An internal server error occurred.", error = ex.Message });
             }
+        }
+        [HttpGet("test-zoom-token")]
+        [AllowAnonymous]
+        public async Task<IActionResult> TestZoomToken()
+        {
+            var result = await _zoomService.TestTokenGenerationAsync();
+            if (result.Contains("failed"))
+            {
+                return StatusCode(500, new { success = false, message = result });
+            }
+            return Ok(new { success = true, message = result });
         }
     }
 }
@@ -1994,18 +2014,34 @@ namespace E_learning.DTO.Course
 
 ### DTO\Zoom\CreateMeetingDTO.cs
 ```cs
-﻿namespace E_learning.DTO.Zoom
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace E_learning.DTO.Zoom
 {
     public class CreateMeetingDTO
     {
+        [Required(ErrorMessage = "Topic is required")]
+        [StringLength(200, ErrorMessage = "Topic cannot exceed 200 characters")]
         public string Topic { get; set; }
-        public int Type { get; set; } = 2;
-        public string StartTime { get; set; }
+
+        [Range(1, 8, ErrorMessage = "Type must be between 1 and 8")]
+        public int Type { get; set; } = 2; // 2 = Scheduled meeting
+
+        [Required(ErrorMessage = "Start time is required")]
+        public string StartTime { get; set; } // Expected format: "2025-07-01T14:30:00"
+
+        [Range(1, 1440, ErrorMessage = "Duration must be between 1 and 1440 minutes")]
         public int Duration { get; set; }
+
         public string Timezone { get; set; } = "Asia/Ho_Chi_Minh";
+
+        // Optional: Add description
+        public string? Agenda { get; set; }
+
+        // Optional: Add password
+        public string? Password { get; set; }
     }
 }
-
 ```
 
 ### Model\Courses\ChoiceModel.cs
@@ -2259,17 +2295,6 @@ namespace E_learning.DTO.Course
             this.userID = userID;
             this.courseID = courseID;
         }
-    }
-}
-
-```
-
-### Model\Meeting\MeetingModel.cs
-```cs
-﻿namespace E_learning.Model.Meeting
-{
-    public class MeetingModel
-    {
     }
 }
 
@@ -2684,10 +2709,10 @@ namespace E_learning.Services
 {
     public interface IZoomService
     {
-        Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string lecturerEmail);
+        Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string email);
+        Task<string> TestTokenGenerationAsync();
     }
 }
-
 ```
 
 ### Services\ZoomService.cs
@@ -2695,6 +2720,7 @@ namespace E_learning.Services
 ﻿using E_learning.DTO.Zoom;
 using E_learning.Model.Zoom;
 using Microsoft.Extensions.Caching.Memory;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -2706,24 +2732,25 @@ namespace E_learning.Services
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IMemoryCache _memoryCache;
+        private readonly ILogger<ZoomService> _logger;
 
-        public ZoomService(IConfiguration configuration, IHttpClientFactory httpClientFactory, IMemoryCache memoryCache)
+        public ZoomService(IConfiguration configuration, IHttpClientFactory httpClientFactory, IMemoryCache memoryCache, ILogger<ZoomService> logger)
         {
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _memoryCache = memoryCache;
+            _logger = logger;
         }
 
         public async Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string email)
         {
             var accessToken = await GetZoomAccessTokenAsync();
-            var client = _httpClientFactory.CreateClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var client = _httpClientFactory.CreateClient("Zoom");
 
             var meetingObject = new
             {
                 topic = meetingDto.Topic,
-                type = meetingDto.Type,
+                type = 2, // Scheduled meeting
                 start_time = meetingDto.StartTime,
                 duration = meetingDto.Duration,
                 timezone = meetingDto.Timezone,
@@ -2740,26 +2767,25 @@ namespace E_learning.Services
             var jsonContent = JsonSerializer.Serialize(meetingObject);
             var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-            var response = await client.PostAsync($"https://api.zoom.us/v2/users/{email}/meetings", content);
+            var response = await client.PostAsync($"users/{email}/meetings", content);
 
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Zoom API Error on meeting creation. Status: {StatusCode}, Response: {Error}, RequestBody: {Body}", response.StatusCode, error, jsonContent);
                 throw new Exception($"Failed to create Zoom meeting. Zoom API returned: {response.StatusCode} - {error}");
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
-            var meetingResponse = JsonSerializer.Deserialize<ZoomMeetingResponse>(responseString, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-
-            return meetingResponse;
+            return JsonSerializer.Deserialize<ZoomMeetingResponse>(responseString, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         }
 
         private async Task<string> GetZoomAccessTokenAsync()
         {
             const string cacheKey = "ZoomAccessToken";
-
             if (_memoryCache.TryGetValue(cacheKey, out string accessToken))
             {
+                _logger.LogInformation("Retrieved Zoom access token from cache.");
                 return accessToken;
             }
 
@@ -2767,28 +2793,54 @@ namespace E_learning.Services
             var clientSecret = _configuration["Zoom:ClientSecret"];
             var accountId = _configuration["Zoom:AccountId"];
 
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) || string.IsNullOrWhiteSpace(accountId))
+            {
+                _logger.LogError("Zoom configuration is missing in appsettings.json.");
+                throw new InvalidOperationException("Zoom configuration (ClientId, ClientSecret, AccountId) is missing.");
+            }
+
             var client = _httpClientFactory.CreateClient();
             var request = new HttpRequestMessage(HttpMethod.Post, "https://zoom.us/oauth/token");
 
             var authValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
+
             request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 { "grant_type", "account_credentials" },
                 { "account_id", accountId }
             });
 
+            _logger.LogInformation("Requesting new Zoom access token for Account ID: {AccountId}", accountId);
             var response = await client.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            var responseContent = await response.Content.ReadAsStringAsync();
 
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var tokenData = JsonDocument.Parse(responseBody).RootElement;
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to get Zoom access token. Status: {StatusCode}, Response: {Response}", response.StatusCode, responseContent);
+                throw new Exception($"Failed to get Zoom access token. Status: {response.StatusCode}, Error: {responseContent}");
+            }
+
+            var tokenData = JsonDocument.Parse(responseContent).RootElement;
             accessToken = tokenData.GetProperty("access_token").GetString();
             var expiresIn = tokenData.GetProperty("expires_in").GetInt32();
 
             _memoryCache.Set(cacheKey, accessToken, TimeSpan.FromSeconds(expiresIn - 300));
-
+            _logger.LogInformation("Successfully obtained and cached new Zoom access token.");
             return accessToken;
+        }
+
+        public async Task<string> TestTokenGenerationAsync()
+        {
+            try
+            {
+                var token = await GetZoomAccessTokenAsync();
+                return $"Token generated successfully. Length: {token?.Length ?? 0}";
+            }
+            catch (Exception ex)
+            {
+                return $"Token generation failed: {ex.Message}";
+            }
         }
     }
 }

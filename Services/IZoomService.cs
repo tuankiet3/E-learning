@@ -5,6 +5,7 @@ namespace E_learning.Services
 {
     public interface IZoomService
     {
-        Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string lecturerEmail);
+        Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string email);
+        Task<string> TestTokenGenerationAsync();
     }
 }

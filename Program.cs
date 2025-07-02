@@ -1,38 +1,47 @@
-﻿using E_learning.DAL.Course;
-using E_learning.DAL.Auth;
+﻿using E_learning.DAL.Auth;
+using E_learning.DAL.Course;
+using E_learning.Repositories.Auth;
+using E_learning.Repositories.Course;
+using E_learning.Repositories.Enrollment; // Thêm using này
+using E_learning.DAL.Enrollment; // Thêm using này
 using E_learning.Services;
+using E_learning.Services.VNPay;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using Microsoft.OpenApi.Models;
-using E_learning.Repositories.Course;
-using E_learning.Services.VNPay;
-using E_learning.Repositories.Auth;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Lấy chuỗi kết nối
 var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection");
-// Đăng kí VNPayService
-builder.Services.AddScoped<VnPayService>();
+
 // Đăng ký các DAL
 builder.Services.AddSingleton(provider => new CoursesDAL(connectionString, provider.GetRequiredService<ILogger<CoursesDAL>>()));
 builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provider.GetRequiredService<ILogger<LessonDAL>>()));
 builder.Services.AddSingleton(provider => new QuizDAL(connectionString, provider.GetRequiredService<ILogger<QuizDAL>>()));
 builder.Services.AddSingleton(provider => new ChoiceDAL(connectionString, provider.GetRequiredService<ILogger<ChoiceDAL>>()));
 builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider.GetRequiredService<ILogger<AuthDAL>>()));
+builder.Services.AddSingleton(provider => new EnrollmentDAL(connectionString, provider.GetRequiredService<ILogger<EnrollmentDAL>>()));
 
 
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<GenerateID>();
-builder.Services.AddHttpClient();
+builder.Services.AddScoped<CheckExsistingID>(); // <-- LỖI ĐÃ ĐƯỢC SỬA TẠI ĐÂY
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IZoomService, ZoomService>();
+builder.Services.AddScoped<VnPayService>();
 
+// Cấu hình HttpClientFactory cho Zoom
+builder.Services.AddHttpClient("Zoom", client =>
+{
+    client.BaseAddress = new Uri("https://api.zoom.us/v2/");
+});
 
-// === CẤU HÌNH JWT AUTHENTICATION ===
+// Cấu hình JWT Authentication
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -52,14 +61,12 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// === THAY THẾ CẤU HÌNH SWAGGERGEN TẠI ĐÂY ===
+// Cấu hình Swagger
 builder.Services.AddSwaggerGen(options =>
 {
-    // 1. Định nghĩa Security Scheme (cách xác thực)
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -69,8 +76,6 @@ builder.Services.AddSwaggerGen(options =>
         In = ParameterLocation.Header,
         Description = "Enter 'Bearer' [space] and then your valid token in the text input below.\n\nExample: \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\""
     });
-
-    // 2. Thêm Security Requirement (yêu cầu xác thực)
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -86,7 +91,6 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
-// ============================================
 
 var app = builder.Build();
 
@@ -97,10 +101,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
