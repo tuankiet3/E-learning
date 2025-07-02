@@ -10,8 +10,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
-using E_learning.Repositories.Payment;
-using E_learning.DAL.Payment;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,8 +22,7 @@ builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provid
 builder.Services.AddSingleton(provider => new QuizDAL(connectionString, provider.GetRequiredService<ILogger<QuizDAL>>()));
 builder.Services.AddSingleton(provider => new ChoiceDAL(connectionString, provider.GetRequiredService<ILogger<ChoiceDAL>>()));
 builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider.GetRequiredService<ILogger<AuthDAL>>()));
-builder.Services.AddSingleton(provider => new EnrollmentDAL(connectionString, provider.GetRequiredService<ILogger<EnrollmentDAL>>()));
-builder.Services.AddSingleton(provider => new PaymentDAL(connectionString, provider.GetRequiredService<ILogger<PaymentDAL>>()));
+builder.Services.AddSingleton(provider => new EnrollmentDAL(connectionString, provider.GetRequiredService<ILogger<EnrollmentDAL>>())); // <-- THÊM DÒNG NÀY
 
 
 // Đăng ký Repository và các service khác
@@ -33,12 +30,10 @@ builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<GenerateID>();
-builder.Services.AddScoped<CheckExsistingID>(); // <-- LỖI ĐÃ ĐƯỢC SỬA TẠI ĐÂY
+builder.Services.AddScoped<CheckExsistingID>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IZoomService, ZoomService>();
 builder.Services.AddScoped<VnPayService>();
-builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
-//builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 
 // Cấu hình HttpClientFactory cho Zoom
 builder.Services.AddHttpClient("Zoom", client =>
@@ -104,7 +99,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-app.UseStaticFiles();
+
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();

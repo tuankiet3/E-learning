@@ -25,40 +25,57 @@ namespace E_learning.Services
 
         public async Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string email)
         {
-            var accessToken = await GetZoomAccessTokenAsync();
-            var client = _httpClientFactory.CreateClient("Zoom");
+            int retryCount = 0;
+            const int maxRetries = 2;
 
-            var meetingObject = new
+            while (retryCount < maxRetries)
             {
-                topic = meetingDto.Topic,
-                type = 2, // Scheduled meeting
-                start_time = meetingDto.StartTime,
-                duration = meetingDto.Duration,
-                timezone = meetingDto.Timezone,
-                settings = new
+                var accessToken = await GetZoomAccessTokenAsync();
+                var client = _httpClientFactory.CreateClient("Zoom");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var meetingObject = new
                 {
-                    join_before_host = true,
-                    mute_upon_entry = true,
-                    participant_video = true,
-                    host_video = true,
-                    auto_recording = "none"
+                    topic = meetingDto.Topic,
+                    type = 2,
+                    start_time = meetingDto.StartTime,
+                    duration = meetingDto.Duration,
+                    timezone = meetingDto.Timezone,
+                    settings = new
+                    {
+                        join_before_host = true,
+                        mute_upon_entry = true,
+                        participant_video = true,
+                        host_video = true,
+                        auto_recording = "none"
+                    }
+                };
+
+                var jsonContent = JsonSerializer.Serialize(meetingObject);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+                var response = await client.PostAsync($"users/{email}/meetings", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseString = await response.Content.ReadAsStringAsync();
+                    return JsonSerializer.Deserialize<ZoomMeetingResponse>(responseString, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                 }
-            };
 
-            var jsonContent = JsonSerializer.Serialize(meetingObject);
-            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            var response = await client.PostAsync($"users/{email}/meetings", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
                 var error = await response.Content.ReadAsStringAsync();
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized && error.Contains("Invalid access token"))
+                {
+                    _memoryCache.Remove("ZoomAccessToken");
+                    retryCount++;
+                    _logger.LogWarning("Invalid Zoom access token. Retrying {RetryCount}/{MaxRetries}", retryCount, maxRetries);
+                    continue;
+                }
+
                 _logger.LogError("Zoom API Error on meeting creation. Status: {StatusCode}, Response: {Error}, RequestBody: {Body}", response.StatusCode, error, jsonContent);
                 throw new Exception($"Failed to create Zoom meeting. Zoom API returned: {response.StatusCode} - {error}");
             }
 
-            var responseString = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<ZoomMeetingResponse>(responseString, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            throw new Exception("Failed to create Zoom meeting after maximum retries due to invalid access token.");
         }
 
         private async Task<string> GetZoomAccessTokenAsync()
@@ -87,10 +104,10 @@ namespace E_learning.Services
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
 
             request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                { "grant_type", "account_credentials" },
-                { "account_id", accountId }
-            });
+    {
+        { "grant_type", "account_credentials" },
+        { "account_id", accountId }
+    });
 
             _logger.LogInformation("Requesting new Zoom access token for Account ID: {AccountId}", accountId);
             var response = await client.SendAsync(request);
@@ -98,7 +115,7 @@ namespace E_learning.Services
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Failed to get Zoom access token. Status: {StatusCode}, Response: {Response}", response.StatusCode, responseContent);
+                _logger.LogError("Failed to get Zoom access token. Status: {StatusCode}, Response: {Response}, ClientId: {ClientId}, AccountId: {AccountId}", response.StatusCode, responseContent, clientId, accountId);
                 throw new Exception($"Failed to get Zoom access token. Status: {response.StatusCode}, Error: {responseContent}");
             }
 

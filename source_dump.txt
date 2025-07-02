@@ -29,8 +29,10 @@ E-learning/
 │   │   ├── CoursesDAL.cs
 │   │   ├── LessonDAL.cs
 │   │   └── QuizDAL.cs
-│   └── Enrollment/
-│       └── EnrollmentDAL.cs
+│   ├── Enrollment/
+│   │   └── EnrollmentDAL.cs
+│   └── Payment/
+│       └── PaymentDAL.cs
 ├── DTO/
 │   ├── Auth/
 │   │   ├── LoginDTO.cs
@@ -42,6 +44,9 @@ E-learning/
 │   │   └── QuizDTO.cs
 │   ├── Enrollment/
 │   │   └── EnrollmentDTO.cs
+│   ├── Payment/
+│   │   ├── PaymentRequestDTO.cs
+│   │   └── PaymentResponseDTO.cs
 │   └── Zoom/
 │       └── CreateMeetingDTO.cs
 ├── Model/
@@ -55,8 +60,7 @@ E-learning/
 │   ├── Message/
 │   │   └── MessageModel.cs
 │   ├── Payment/
-│   │   ├── PaymentRequestModel.cs
-│   │   └── PaymentResponseModel.cs
+│   │   └── PaymentModel.cs
 │   ├── Users/
 │   │   ├── UserModel.cs
 │   │   └── UserRole.cs
@@ -71,10 +75,15 @@ E-learning/
 │   ├── Course/
 │   │   ├── CourseRepository.cs
 │   │   └── ICourseRepository.cs
-│   └── Enrollment/
-│       ├── EnrollmentRepository.cs
-│       └── IEnrollmentRepository.cs
+│   ├── Enrollment/
+│   │   ├── EnrollmentRepository.cs
+│   │   └── IEnrollmentRepository.cs
+│   └── Payment/
+│       ├── IPaymentRepository.cs
+│       └── PaymentRepository.cs
 ├── Services/
+│   ├── RealTimeChat/
+│   │   └── SignalR.cs
 │   ├── VNPay/
 │   │   ├── VnPayLibrary.cs
 │   │   └── VnPayService.cs
@@ -103,6 +112,8 @@ E-learning/
 using E_learning.DAL.Course;
 using E_learning.Repositories.Auth;
 using E_learning.Repositories.Course;
+using E_learning.Repositories.Enrollment; // Thêm using này
+using E_learning.DAL.Enrollment; // Thêm using này
 using E_learning.Services;
 using E_learning.Services.VNPay;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -121,11 +132,15 @@ builder.Services.AddSingleton(provider => new LessonDAL(connectionString, provid
 builder.Services.AddSingleton(provider => new QuizDAL(connectionString, provider.GetRequiredService<ILogger<QuizDAL>>()));
 builder.Services.AddSingleton(provider => new ChoiceDAL(connectionString, provider.GetRequiredService<ILogger<ChoiceDAL>>()));
 builder.Services.AddSingleton(provider => new AuthDAL(connectionString, provider.GetRequiredService<ILogger<AuthDAL>>()));
+builder.Services.AddSingleton(provider => new EnrollmentDAL(connectionString, provider.GetRequiredService<ILogger<EnrollmentDAL>>())); // <-- THÊM DÒNG NÀY
+
 
 // Đăng ký Repository và các service khác
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<GenerateID>();
+builder.Services.AddScoped<CheckExsistingID>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IZoomService, ZoomService>();
 builder.Services.AddScoped<VnPayService>();
@@ -335,11 +350,13 @@ namespace E_learning.Controllers
     {
         private readonly IZoomService _zoomService;
         private readonly ILogger<MeetingController> _logger;
+        private readonly IConfiguration _configuration;
 
-        public MeetingController(IZoomService zoomService, ILogger<MeetingController> logger)
+        public MeetingController(IZoomService zoomService, ILogger<MeetingController> logger, IConfiguration configuration)
         {
             _zoomService = zoomService;
             _logger = logger;
+            _configuration = configuration;
         }
 
         [HttpPost("create")]
@@ -350,29 +367,30 @@ namespace E_learning.Controllers
                 return BadRequest(ModelState);
             }
 
-            var email = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(email))
+            var defaultEmail = _configuration["Zoom:DefaultMeetingUserEmail"];
+            if (string.IsNullOrEmpty(defaultEmail))
             {
-                _logger.LogWarning("User email not found in JWT token.");
-                return BadRequest(new { success = false, message = "User email not found in token." });
+                _logger.LogError("Default Zoom user email is not configured.");
+                return StatusCode(500, new { success = false, message = "Lỗi cấu hình máy chủ." });
             }
+
             if (DateTime.TryParse(meetingDto.StartTime, out var startTime) && startTime <= DateTime.UtcNow)
             {
-                return BadRequest(new { success = false, message = "Meeting start time must be in the future." });
+                return BadRequest(new { success = false, message = "Thời gian bắt đầu cuộc họp phải ở tương lai." });
             }
 
             try
             {
-                _logger.LogInformation("Attempting to create Zoom meeting for user {Email}", email);
-                var meetingResponse = await _zoomService.CreateMeetingAsync(meetingDto, email);
-                _logger.LogInformation("Successfully created Zoom meeting with ID {MeetingId} for user {Email}", meetingResponse?.Id, email);
+                _logger.LogInformation("Đang cố gắng tạo cuộc họp Zoom cho người dùng mặc định {Email}", defaultEmail);
+                var meetingResponse = await _zoomService.CreateMeetingAsync(meetingDto, defaultEmail);
+                _logger.LogInformation("Đã tạo thành công cuộc họp Zoom với ID {MeetingId} cho người dùng mặc định {Email}", meetingResponse?.Id, defaultEmail);
 
                 return Ok(new { success = true, data = meetingResponse });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An unhandled exception occurred while creating a Zoom meeting for {Email}", email);
-                return StatusCode(500, new { success = false, message = "An internal server error occurred.", error = ex.Message });
+                _logger.LogError(ex, "Đã xảy ra lỗi không xác định khi tạo cuộc họp Zoom cho người dùng mặc định {Email}", defaultEmail);
+                return StatusCode(500, new { success = false, message = "Đã xảy ra lỗi nội bộ máy chủ.", error = ex.Message });
             }
         }
         [HttpGet("test-zoom-token")]
@@ -725,26 +743,49 @@ namespace E_learning.Controllers.Course
             }
         }
         [HttpPost("InsertLesson")]
-        [ProducesResponseType(typeof(LessonModel), statusCode: 201)]
+        [ProducesResponseType(typeof(LessonModel), statusCode: 200)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> InsertLesson([FromBody] LessonDTO lesson)
+        public async Task<IActionResult> InsertLesson([FromForm] LessonDTO lesson)
         {
             if (lesson == null)
             {
                 return BadRequest("Lesson data is null");
             }
+            if (lesson.videoFile == null || lesson.videoFile.Length == 0)
+            {
+                return BadRequest("Video file is null or empty");
+            }
+            string newID = await _checkExsistingID.GenerateUniqueID(
+                   _courseRepo.GetAllLessons,
+                   l => l.GetLessonID(),
+                   _generateID.generateLessonID
+              );
+            var orgPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var videoPath = Path.Combine(orgPath, "videos");
+            if (!Directory.Exists(videoPath))
+            {
+                Directory.CreateDirectory(videoPath);
+            }
+            var fileExt = Path.GetExtension(lesson.videoFile.FileName);
+            var fileName = $"{newID}{fileExt}"; 
+            // Đường dẫn lưu file
+            var savePath = Path.Combine(videoPath, fileName);
+
+            // Lưu file vào ổ đĩa
+            using (var stream = new FileStream(savePath, FileMode.Create))
+            {
+                await lesson.videoFile.CopyToAsync(stream);
+            }
+
+            // Trả về URL truy cập video
+            var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
             try
             {
-                string newID = await _checkExsistingID.GenerateUniqueID(
-                    _courseRepo.GetAllLessons,
-                    l => l.GetLessonID(),
-                    _generateID.generateLessonID
-                );
                 LessonModel lessonModel = new LessonModel(
                     newID,
                     lesson.lessonTitle,
-                    lesson.lessonURL,
+                    videoUrl,
                     lesson.courseID
                 );
                 bool isInserted = await _courseRepo.InsertLesson(lessonModel);
@@ -752,7 +793,11 @@ namespace E_learning.Controllers.Course
                 {
                     return BadRequest("Failed to insert lesson");
                 }
-                return CreatedAtAction(nameof(GetLessonsByCourseID), new { lesson.courseID }, lessonModel);
+                return Ok(new
+                {
+                    Message = "Lesson inserted successfully",
+                    Lesson = lessonModel
+                });
             }
             catch (Exception ex)
             {
@@ -760,6 +805,38 @@ namespace E_learning.Controllers.Course
                 return StatusCode(500, "Internal server error");
             }
         }
+
+        //[HttpPost("upload_video")]
+        //[ProducesResponseType(typeof(string), statusCode: 201)]
+        //[ProducesResponseType(StatusCodes.Status400BadRequest)]
+        //[ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        //public async Task<IActionResult> UploadVideo(IFormFile videoFile)
+        //{
+        //    if(videoFile == null || videoFile.Length == 0)
+        //    {
+        //        return BadRequest("Video file is null or empty");
+        //    }
+        //    var orgPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        //    var videoPath = Path.Combine(orgPath, "videos");
+        //    if(!Directory.Exists(videoPath))
+        //    {
+        //        Directory.CreateDirectory(videoPath);
+        //    }
+        //    var fileName = Path.GetFileName(videoFile.FileName);
+
+        //    // Đường dẫn lưu file
+        //    var savePath = Path.Combine(videoPath, fileName);
+
+        //    // Lưu file vào ổ đĩa
+        //    using (var stream = new FileStream(savePath, FileMode.Create))
+        //    {
+        //        await videoFile.CopyToAsync(stream);
+        //    }
+
+        //    // Trả về URL truy cập video
+        //    var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
+        //    return Ok(new { url = videoUrl });
+        //}
     }
 }
 
@@ -981,7 +1058,10 @@ namespace E_learning.Controllers.Enrollment
 
 ### Controllers\Payment\PaymentController.cs
 ```cs
-﻿using E_learning.Model.Payment;
+﻿using E_learning.DTO.Payment;
+using E_learning.Model.Payment;
+using E_learning.Repositories.Payment;
+using E_learning.Services;
 using E_learning.Services.VNPay;
 using Microsoft.AspNetCore.Mvc;
 
@@ -992,22 +1072,29 @@ namespace E_learning.Controllers.Payment
     public class PaymentController : ControllerBase
     {
         private readonly VnPayService _vnPayService;
-
-        public PaymentController(VnPayService vnPayService)
+        private readonly IPaymentRepository _paymentRepository;
+        private readonly ILogger<PaymentController> _logger;
+        private readonly GenerateID _generateID;
+        private readonly CheckExsistingID _checkExsistingID;
+        public PaymentController(VnPayService vnPayService, ILogger<PaymentController> logger,GenerateID generateID, CheckExsistingID checkExsistingID, IPaymentRepository paymentRepository )
         {
             _vnPayService = vnPayService;
+            _logger = logger;
+            _generateID = generateID;
+            _checkExsistingID = checkExsistingID;
+            _paymentRepository = paymentRepository;
         }
 
         [HttpPost("create")]
-        public IActionResult Create([FromBody] PaymentRequestModel model)
+        public async Task<IActionResult> Create([FromBody] PaymentRequestDTO model)
         {
             if (model == null || model.Amount <= 0)
                 return BadRequest("Invalid payment information.");
 
             try
             {
-                var paymentUrl = _vnPayService.CreatePaymentUrl(model, HttpContext);
-
+                var paymentUrl = _vnPayService.CreatePaymentUrl(model, HttpContext, model.courseId);
+                Console.WriteLine("Payment URL: " + model.courseId);
                 return Ok(new
                 {
                     success = true,
@@ -1025,24 +1112,69 @@ namespace E_learning.Controllers.Payment
         }
 
         [HttpGet("vnpay-return")]
-        public IActionResult VNPayReturn()
+        public async Task<IActionResult> VNPayReturn([FromQuery] string courseId)
         {
             var response = _vnPayService.PaymentExecute(HttpContext.Request.Query);
             Console.WriteLine("Response: " + response.OrderInfo);
-
+            //string newPaymentID = await _checkExsistingID.GenerateUniqueID(
+            //    _paymentRepository.getAllPaymentAsync,
+            //    r => r.GetPaymentID(),
+            //    _generateID.GeneratePaymentID
+            //);
+            string newPaymentID = "123";
+            string[] name_desc_amout = response.OrderInfo.Split('|');
+            string[] desc_amout = name_desc_amout[1].Split('-');
+            string buyerName = name_desc_amout[0];
+            string orderDescription = desc_amout[0];
+            decimal orderAmount = decimal.Parse(desc_amout[1]);
+            Console.WriteLine("Buyer Name: " + buyerName);
+            Console.WriteLine("Order Description: " + orderDescription);
+            Console.WriteLine("Order Amount: " + orderAmount);
+            string courseID = courseId;
+            Console.WriteLine("Course ID: " + response.OrderInfo);
             if (response.Success)
             {
-               
-                return Redirect("https://localhost:7173/swagger/index.html");
+                PaymentModel paymentModel = new PaymentModel(
+                    newPaymentID,
+                    buyerName,
+                    orderDescription,
+                    orderAmount,
+                    courseID
+                );
+                //bool isSaved = await _paymentRepository.SavePaymentAsync(paymentModel);
+                //if (!isSaved)
+                //{
+                //    _logger.LogError("Failed to save payment information for course ID: {CourseID}", courseID);
+                //    return StatusCode(500, "Failed to save payment information.");
+                //}
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Thanh toán thành công",
+                        Object = new
+                        {
+                            PaymentID = newPaymentID,
+                            BuyerName = buyerName,
+                            OrderDescription = orderDescription,
+                            OrderAmount = orderAmount,
+                            CourseID = courseID
+                        }
+                    });
+                
             }
             else
             {
-               
-                return Redirect("https://localhost:7188/swagger/payment-failed");
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Thanh toán thất bại",
+                  
+                });
             }
         }
     }
 }
+    
 ```
 
 ### DAL\Auth\AuthDAL.cs
@@ -1190,6 +1322,11 @@ using System.Collections.Generic;
 using E_learning.Model.Courses;
 namespace E_learning.DAL.Course
 {
+    //public LessonDAL(IConfiguration configuration, ILogger<LessonDAL> logger)
+    //{
+    //    _connectionString = configuration.GetConnectionString("SqlServerConnection");
+    //    _logger = logger;
+    //}
     public class ChoiceDAL
     {
         private readonly string _connectionString;
@@ -1866,6 +2003,85 @@ namespace E_learning.DAL.Enrollment
 
 ```
 
+### DAL\Payment\PaymentDAL.cs
+```cs
+﻿using E_learning.Model.Payment;
+using Microsoft.Data.SqlClient;
+
+namespace E_learning.DAL.Payment
+{
+    public class PaymentDAL
+    {
+        private readonly string _connectionString;
+        private readonly ILogger<PaymentDAL> _logger;
+        public PaymentDAL(string connectionString, ILogger<PaymentDAL> logger)
+        {
+            _connectionString = connectionString;
+            _logger = logger;
+        }
+
+        public async Task<bool> SavePaymentAsync(PaymentModel paymentModel)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    var query = "INSERT INTO Payments (PaymentID, buyerName, Description, Amout, CourseID) VALUES (@PaymentID, @buyerName, @Description, @Amout, @CourseID)";
+                    var command = new SqlCommand(query, connection);
+                    command.Parameters.AddWithValue("@PaymentID", paymentModel.GetPaymentID);
+                    command.Parameters.AddWithValue("@buyerName", paymentModel.GetBuyerName);
+                    command.Parameters.AddWithValue("@Description", paymentModel.GetDescription);
+                    command.Parameters.AddWithValue("@Amout", paymentModel.GetPaymentID);
+                    command.Parameters.AddWithValue("@CourseID", paymentModel.GetCourseId);
+                    var result = await command.ExecuteNonQueryAsync();
+                    return result > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving payment to database.");
+                return false;
+            }
+        }
+
+        public async Task<List<PaymentModel>> getAllPaymentAsync()
+        {
+            List<PaymentModel> payments = new List<PaymentModel>();
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    var query = "SELECT PaymentID, buyerName, Description, Amout, CourseID FROM Payments";
+                    var command = new SqlCommand(query, connection);
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            string paymentId = reader.GetString(reader.GetOrdinal("PaymentID"));
+                            string buyerName = reader.GetString(reader.GetOrdinal("buyerName"));
+                            string description = reader.GetString(reader.GetOrdinal("Description"));
+                            decimal amount = reader.GetDecimal(reader.GetOrdinal("Amout"));
+                            string courseId = reader.GetString(reader.GetOrdinal("CourseID"));
+                            var payment = new PaymentModel(paymentId, buyerName, description, amount, courseId);
+                            payments.Add(payment);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving payments from database.");
+            }
+            return payments;
+        }
+
+    }
+}
+
+```
+
 ### DTO\Auth\LoginDTO.cs
 ```cs
 ﻿using System.ComponentModel.DataAnnotations;
@@ -1971,11 +2187,8 @@ namespace E_learning.DTO.Course
     {
         [Required(ErrorMessage = "Lesson title is required")]
         public string lessonTitle { get; set; }
-        [Required(ErrorMessage = "Lesson URL is required")]
-        [Url(ErrorMessage = "Invalid URL format")]
-        public string lessonURL { get; set; }
-        [Required(ErrorMessage = "Course ID is required")]
         public string courseID { get; set; }
+        public IFormFile videoFile { get; set; }
     }
 }
 
@@ -2012,9 +2225,47 @@ namespace E_learning.DTO.Course
 
 ```
 
+### DTO\Payment\PaymentRequestDTO.cs
+```cs
+﻿namespace E_learning.DTO.Payment
+{
+    public class PaymentRequestDTO
+    {
+        public string OrderType { get; set; } = "other";
+        public double Amount { get; set; }
+        public string OrderDescription { get; set; }
+        public string Name { get; set; }
+
+        public string courseId { get; set; }
+    }
+}
+
+```
+
+### DTO\Payment\PaymentResponseDTO.cs
+```cs
+﻿namespace E_learning.DTO.Payment
+{
+    public class PaymentResponseDTO
+    {
+        public string OrderInfo { get; set; }
+        public string TransactionId { get; set; }
+        public string OrderId { get; set; }
+        public string PaymentMethod { get; set; }
+        public string PaymentId { get; set; }
+        public bool Success { get; set; }
+        public string Token { get; set; }
+        public string VnPayResponseCode { get; set; }
+        public string Message { get; set; } // Add this line
+    }
+}
+
+```
+
 ### DTO\Zoom\CreateMeetingDTO.cs
 ```cs
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization; // Add this line
 
 namespace E_learning.DTO.Zoom
 {
@@ -2025,20 +2276,20 @@ namespace E_learning.DTO.Zoom
         public string Topic { get; set; }
 
         [Range(1, 8, ErrorMessage = "Type must be between 1 and 8")]
-        public int Type { get; set; } = 2; // 2 = Scheduled meeting
+        public int Type { get; set; } = 2;
 
         [Required(ErrorMessage = "Start time is required")]
-        public string StartTime { get; set; } // Expected format: "2025-07-01T14:30:00"
+        public string StartTime { get; set; }
 
         [Range(1, 1440, ErrorMessage = "Duration must be between 1 and 1440 minutes")]
         public int Duration { get; set; }
 
         public string Timezone { get; set; } = "Asia/Ho_Chi_Minh";
 
-        // Optional: Add description
         public string? Agenda { get; set; }
 
-        // Optional: Add password
+        // Add the [JsonPropertyName] attribute to ensure correct serialization
+        [JsonPropertyName("password")]
         public string? Password { get; set; }
     }
 }
@@ -2311,36 +2562,67 @@ namespace E_learning.DTO.Zoom
 
 ```
 
-### Model\Payment\PaymentRequestModel.cs
+### Model\Payment\PaymentModel.cs
 ```cs
 ﻿namespace E_learning.Model.Payment
 {
-    public class PaymentRequestModel
+    public class PaymentModel
     {
-        public string OrderType { get; set; } = "other";
-        public double Amount { get; set; }
-        public string OrderDescription { get; set; }
-        public string Name { get; set; }
-    }
-}
+        private string PaymentID { get; set; }
+        private string BuyerName { get; set; }
+        private string Description { get; set; }
+        private decimal Amount { get; set; }
 
-```
+        private string courseId { get; set; }
 
-### Model\Payment\PaymentResponseModel.cs
-```cs
-﻿namespace E_learning.Model.Payment
-{
-    public class PaymentResponseModel
-    {
-        public string OrderInfo { get; set; }
-        public string TransactionId { get; set; }
-        public string OrderId { get; set; }
-        public string PaymentMethod { get; set; }
-        public string PaymentId { get; set; }
-        public bool Success { get; set; }
-        public string Token { get; set; }
-        public string VnPayResponseCode { get; set; }
-        public string Message { get; set; } // Add this line
+        public string GetPaymentID()
+        {
+            return PaymentID;
+        }
+        public void SetPaymentID(string paymentId)
+        {
+            PaymentID = paymentId;
+        }
+        public string GetBuyerName()
+        {
+            return BuyerName;
+        }
+        public void SetBuyerName(string buyerName)
+        {
+            BuyerName = buyerName;
+        }
+        public string GetDescription()
+        {
+            return Description;
+        }
+        public void SetDescription(string description)
+        {
+            Description = description;
+        }
+        public decimal GetAmount()
+        {
+            return Amount;
+        }
+        public void SetAmount(decimal amount)
+        {
+            Amount = amount;
+        }
+        public string GetCourseId()
+        {
+            return courseId;
+        }
+        public void SetCourseId(string courseId)
+        {
+            this.courseId = courseId;
+        }
+        public PaymentModel(string paymentId, string buyerName, string description, decimal amount, string courseId)
+        {
+            PaymentID = paymentId;
+            BuyerName = buyerName;
+            Description = description;
+            Amount = amount;
+            this.courseId = courseId;
+        }
     }
 }
 
@@ -2614,6 +2896,50 @@ namespace E_learning.Repositories.Enrollment
 
 ```
 
+### Repositories\Payment\IPaymentRepository.cs
+```cs
+﻿using E_learning.Model.Payment;
+
+namespace E_learning.Repositories.Payment
+{
+    public interface IPaymentRepository
+    {
+        Task<bool> SavePaymentAsync(PaymentModel paymentModel);
+        Task<List<PaymentModel>> getAllPaymentAsync();
+    }
+}
+
+```
+
+### Repositories\Payment\PaymentRepository.cs
+```cs
+﻿using E_learning.DAL.Payment;
+using E_learning.Model.Payment;
+
+namespace E_learning.Repositories.Payment
+{
+    public class PaymentRepository : IPaymentRepository
+    {
+        private readonly PaymentDAL _paymentDAL;
+        public PaymentRepository(PaymentDAL paymentDAL)
+        {
+            _paymentDAL = paymentDAL;
+        }
+
+        public Task<List<PaymentModel>> getAllPaymentAsync()
+        {
+           return _paymentDAL.getAllPaymentAsync();
+        }
+
+        public Task<bool> SavePaymentAsync(PaymentModel paymentModel)
+        {
+            return _paymentDAL.SavePaymentAsync(paymentModel);
+        }
+    }
+}
+
+```
+
 ### Services\CheckExsistingID.cs
 ```cs
 ﻿namespace E_learning.Services
@@ -2695,9 +3021,14 @@ namespace E_learning.Services
         public string generateLecturerID() => $"LEC{generateID()}";
         public string generateAdminID() => $"ADID{generateID()}";
 
+        public string GeneratePaymentID()
+        {
+            string numberString = generateID();
+            return $"PID{numberString}";
+        }
+
     }
 }
-
 ```
 
 ### Services\IZoomService.cs
@@ -2744,40 +3075,57 @@ namespace E_learning.Services
 
         public async Task<ZoomMeetingResponse> CreateMeetingAsync(CreateMeetingDTO meetingDto, string email)
         {
-            var accessToken = await GetZoomAccessTokenAsync();
-            var client = _httpClientFactory.CreateClient("Zoom");
+            int retryCount = 0;
+            const int maxRetries = 2;
 
-            var meetingObject = new
+            while (retryCount < maxRetries)
             {
-                topic = meetingDto.Topic,
-                type = 2, // Scheduled meeting
-                start_time = meetingDto.StartTime,
-                duration = meetingDto.Duration,
-                timezone = meetingDto.Timezone,
-                settings = new
+                var accessToken = await GetZoomAccessTokenAsync();
+                var client = _httpClientFactory.CreateClient("Zoom");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var meetingObject = new
                 {
-                    join_before_host = true,
-                    mute_upon_entry = true,
-                    participant_video = true,
-                    host_video = true,
-                    auto_recording = "none"
+                    topic = meetingDto.Topic,
+                    type = 2,
+                    start_time = meetingDto.StartTime,
+                    duration = meetingDto.Duration,
+                    timezone = meetingDto.Timezone,
+                    settings = new
+                    {
+                        join_before_host = true,
+                        mute_upon_entry = true,
+                        participant_video = true,
+                        host_video = true,
+                        auto_recording = "none"
+                    }
+                };
+
+                var jsonContent = JsonSerializer.Serialize(meetingObject);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+                var response = await client.PostAsync($"users/{email}/meetings", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseString = await response.Content.ReadAsStringAsync();
+                    return JsonSerializer.Deserialize<ZoomMeetingResponse>(responseString, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                 }
-            };
 
-            var jsonContent = JsonSerializer.Serialize(meetingObject);
-            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            var response = await client.PostAsync($"users/{email}/meetings", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
                 var error = await response.Content.ReadAsStringAsync();
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized && error.Contains("Invalid access token"))
+                {
+                    _memoryCache.Remove("ZoomAccessToken");
+                    retryCount++;
+                    _logger.LogWarning("Invalid Zoom access token. Retrying {RetryCount}/{MaxRetries}", retryCount, maxRetries);
+                    continue;
+                }
+
                 _logger.LogError("Zoom API Error on meeting creation. Status: {StatusCode}, Response: {Error}, RequestBody: {Body}", response.StatusCode, error, jsonContent);
                 throw new Exception($"Failed to create Zoom meeting. Zoom API returned: {response.StatusCode} - {error}");
             }
 
-            var responseString = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<ZoomMeetingResponse>(responseString, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            throw new Exception("Failed to create Zoom meeting after maximum retries due to invalid access token.");
         }
 
         private async Task<string> GetZoomAccessTokenAsync()
@@ -2806,10 +3154,10 @@ namespace E_learning.Services
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
 
             request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                { "grant_type", "account_credentials" },
-                { "account_id", accountId }
-            });
+    {
+        { "grant_type", "account_credentials" },
+        { "account_id", accountId }
+    });
 
             _logger.LogInformation("Requesting new Zoom access token for Account ID: {AccountId}", accountId);
             var response = await client.SendAsync(request);
@@ -2817,7 +3165,7 @@ namespace E_learning.Services
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Failed to get Zoom access token. Status: {StatusCode}, Response: {Response}", response.StatusCode, responseContent);
+                _logger.LogError("Failed to get Zoom access token. Status: {StatusCode}, Response: {Response}, ClientId: {ClientId}, AccountId: {AccountId}", response.StatusCode, responseContent, clientId, accountId);
                 throw new Exception($"Failed to get Zoom access token. Status: {response.StatusCode}, Error: {responseContent}");
             }
 
@@ -2847,14 +3195,68 @@ namespace E_learning.Services
 
 ```
 
+### Services\RealTimeChat\SignalR.cs
+```cs
+﻿using Microsoft.AspNetCore.Connections.Features;
+using Microsoft.AspNetCore.SignalR;
+
+namespace E_learning.Services.RealTimeChat
+{
+    public class SignalR : Hub
+    {
+        private readonly Dictionary<string,List<string>> _conncetion = new();
+
+        public async Task registerConnect(string userID)
+        { 
+            var connectionId = Context.ConnectionId;
+            if (!_conncetion.ContainsKey(userID)) { 
+                _conncetion.Add(userID, new List<string>());
+                _conncetion[userID].Add(connectionId);
+            } else
+            {
+                var list = _conncetion[userID];
+                lock (list)
+                {
+                    if (!list.Contains(connectionId))
+                    {
+                        list.Add(connectionId);
+                    }
+                }
+            }
+        }
+
+        public async Task removeConnect(string userID)
+        {
+            var connectionId = Context.ConnectionId;
+            if (_conncetion.ContainsKey(userID))
+            {
+                var list = _conncetion[userID];
+                lock (list)
+                {
+                    if (list.Contains(connectionId))
+                    {
+                        list.Remove(connectionId);
+                    }
+                }
+                if (list.Count == 0)
+                {
+                    _conncetion.Remove(userID);
+                }
+            }
+        }
+    }
+}
+
+```
+
 ### Services\VNPay\VnPayLibrary.cs
 ```cs
-﻿using E_learning.Model.Payment;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net.Sockets;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using E_learning.DTO.Payment;
 
 namespace E_learning.Services.VNPay
 {
@@ -2864,7 +3266,7 @@ namespace E_learning.Services.VNPay
         private readonly SortedList<string, string> _responseData = new SortedList<string, string>(new VnPayCompare());
 
 
-        public PaymentResponseModel GetFullResponseData(IQueryCollection collection, string hashSecret)
+        public PaymentResponseDTO GetFullResponseData(IQueryCollection collection, string hashSecret)
         {
             var vnPay = new VnPayLibrary();
             foreach (var (key, value) in collection)
@@ -2883,12 +3285,12 @@ namespace E_learning.Services.VNPay
             var checkSignature =
                 vnPay.ValidateSignature(vnpSecureHash, hashSecret); //check Signature
             if (!checkSignature)
-                return new PaymentResponseModel()
+                return new PaymentResponseDTO()
                 {
                     Success = false
                 };
             var isSuccess = vnpResponseCode == "00";
-            return new PaymentResponseModel()
+            return new PaymentResponseDTO()
             {
                 Success = isSuccess,
                 PaymentMethod = "VnPay",
@@ -3040,7 +3442,7 @@ namespace E_learning.Services.VNPay
 
 ### Services\VNPay\VnPayService.cs
 ```cs
-﻿using E_learning.Model.Payment;
+﻿using E_learning.DTO.Payment;
 
 namespace E_learning.Services.VNPay
 {
@@ -3052,13 +3454,16 @@ namespace E_learning.Services.VNPay
         {
             _configuration = configuration;
         }
-        public string CreatePaymentUrl(PaymentRequestModel model, HttpContext context)
+        public string CreatePaymentUrl(PaymentRequestDTO model, HttpContext context, string courseID)
         {
             var timeZoneById = TimeZoneInfo.FindSystemTimeZoneById(_configuration["TimeZoneId"]);
             var timeNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZoneById);
             var tick = DateTime.Now.Ticks.ToString();
             var pay = new VnPayLibrary();
+
+
             var urlCallBack = _configuration["Vnpay:PaymentBackReturnUrl"];
+            urlCallBack += $"?courseId={courseID}";
             var expireDate = timeNow.AddMinutes(15).ToString("yyyyMMddHHmmss");
             pay.AddRequestData("vnp_Version", _configuration["Vnpay:Version"]);
             pay.AddRequestData("vnp_Command", _configuration["Vnpay:Command"]);
@@ -3068,21 +3473,20 @@ namespace E_learning.Services.VNPay
             pay.AddRequestData("vnp_CurrCode", _configuration["Vnpay:CurrCode"]);
             pay.AddRequestData("vnp_IpAddr", pay.GetIpAddress(context));
             pay.AddRequestData("vnp_Locale", _configuration["Vnpay:Locale"]);
-            pay.AddRequestData("vnp_OrderInfo", $"{model.Name}|{model.OrderDescription}|{model.Amount}");
+            pay.AddRequestData("vnp_OrderInfo", $"{model.Name}|{model.OrderDescription}-{model.Amount}");
             pay.AddRequestData("vnp_OrderType", model.OrderType);
             pay.AddRequestData("vnp_ReturnUrl", urlCallBack);
             pay.AddRequestData("vnp_TxnRef", tick);
             pay.AddRequestData("vnp_ExpireDate", expireDate);
 
-            var paymentUrl =
-                pay.CreateRequestUrl(_configuration["Vnpay:BaseUrl"], _configuration["Vnpay:HashSecret"]);
+            var paymentUrl = pay.CreateRequestUrl(_configuration["Vnpay:BaseUrl"], _configuration["Vnpay:HashSecret"]);
             Console.WriteLine("Payment URL: " + paymentUrl);
 
             return paymentUrl;
         }
 
 
-        public PaymentResponseModel PaymentExecute(IQueryCollection collections)
+        public PaymentResponseDTO PaymentExecute(IQueryCollection collections)
         {
             var pay = new VnPayLibrary();
             var response = pay.GetFullResponseData(collections, _configuration["Vnpay:HashSecret"]);

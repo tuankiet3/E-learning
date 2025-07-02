@@ -13,11 +13,13 @@ namespace E_learning.Controllers
     {
         private readonly IZoomService _zoomService;
         private readonly ILogger<MeetingController> _logger;
+        private readonly IConfiguration _configuration;
 
-        public MeetingController(IZoomService zoomService, ILogger<MeetingController> logger)
+        public MeetingController(IZoomService zoomService, ILogger<MeetingController> logger, IConfiguration configuration)
         {
             _zoomService = zoomService;
             _logger = logger;
+            _configuration = configuration;
         }
 
         [HttpPost("create")]
@@ -28,29 +30,30 @@ namespace E_learning.Controllers
                 return BadRequest(ModelState);
             }
 
-            var email = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(email))
+            var defaultEmail = _configuration["Zoom:DefaultMeetingUserEmail"];
+            if (string.IsNullOrEmpty(defaultEmail))
             {
-                _logger.LogWarning("User email not found in JWT token.");
-                return BadRequest(new { success = false, message = "User email not found in token." });
+                _logger.LogError("Default Zoom user email is not configured.");
+                return StatusCode(500, new { success = false, message = "Lỗi cấu hình máy chủ." });
             }
+
             if (DateTime.TryParse(meetingDto.StartTime, out var startTime) && startTime <= DateTime.UtcNow)
             {
-                return BadRequest(new { success = false, message = "Meeting start time must be in the future." });
+                return BadRequest(new { success = false, message = "Thời gian bắt đầu cuộc họp phải ở tương lai." });
             }
 
             try
             {
-                _logger.LogInformation("Attempting to create Zoom meeting for user {Email}", email);
-                var meetingResponse = await _zoomService.CreateMeetingAsync(meetingDto, email);
-                _logger.LogInformation("Successfully created Zoom meeting with ID {MeetingId} for user {Email}", meetingResponse?.Id, email);
+                _logger.LogInformation("Đang cố gắng tạo cuộc họp Zoom cho người dùng mặc định {Email}", defaultEmail);
+                var meetingResponse = await _zoomService.CreateMeetingAsync(meetingDto, defaultEmail);
+                _logger.LogInformation("Đã tạo thành công cuộc họp Zoom với ID {MeetingId} cho người dùng mặc định {Email}", meetingResponse?.Id, defaultEmail);
 
                 return Ok(new { success = true, data = meetingResponse });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An unhandled exception occurred while creating a Zoom meeting for {Email}", email);
-                return StatusCode(500, new { success = false, message = "An internal server error occurred.", error = ex.Message });
+                _logger.LogError(ex, "Đã xảy ra lỗi không xác định khi tạo cuộc họp Zoom cho người dùng mặc định {Email}", defaultEmail);
+                return StatusCode(500, new { success = false, message = "Đã xảy ra lỗi nội bộ máy chủ.", error = ex.Message });
             }
         }
         [HttpGet("test-zoom-token")]
