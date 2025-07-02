@@ -1,9 +1,9 @@
-﻿using E_learning.Model.Payment;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net.Sockets;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using E_learning.DTO.Payment;
 
 namespace E_learning.Services.VNPay
 {
@@ -13,7 +13,7 @@ namespace E_learning.Services.VNPay
         private readonly SortedList<string, string> _responseData = new SortedList<string, string>(new VnPayCompare());
 
 
-        public PaymentResponseModel GetFullResponseData(IQueryCollection collection, string hashSecret)
+        public PaymentResponseDTO GetFullResponseData(IQueryCollection collection, string hashSecret)
         {
             var vnPay = new VnPayLibrary();
             foreach (var (key, value) in collection)
@@ -32,12 +32,12 @@ namespace E_learning.Services.VNPay
             var checkSignature =
                 vnPay.ValidateSignature(vnpSecureHash, hashSecret); //check Signature
             if (!checkSignature)
-                return new PaymentResponseModel()
+                return new PaymentResponseDTO()
                 {
                     Success = false
                 };
             var isSuccess = vnpResponseCode == "00";
-            return new PaymentResponseModel()
+            return new PaymentResponseDTO()
             {
                 Success = isSuccess,
                 PaymentMethod = "VnPay",

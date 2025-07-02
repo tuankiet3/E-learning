@@ -5,6 +5,11 @@ using System.Collections.Generic;
 using E_learning.Model.Courses;
 namespace E_learning.DAL.Course
 {
+    //public LessonDAL(IConfiguration configuration, ILogger<LessonDAL> logger)
+    //{
+    //    _connectionString = configuration.GetConnectionString("SqlServerConnection");
+    //    _logger = logger;
+    //}
     public class ChoiceDAL
     {
         private readonly string _connectionString;

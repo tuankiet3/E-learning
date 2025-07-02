@@ -68,26 +68,49 @@ namespace E_learning.Controllers.Course
             }
         }
         [HttpPost("InsertLesson")]
-        [ProducesResponseType(typeof(LessonModel), statusCode: 201)]
+        [ProducesResponseType(typeof(LessonModel), statusCode: 200)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> InsertLesson([FromBody] LessonDTO lesson)
+        public async Task<IActionResult> InsertLesson([FromForm] LessonDTO lesson)
         {
             if (lesson == null)
             {
                 return BadRequest("Lesson data is null");
             }
+            if (lesson.videoFile == null || lesson.videoFile.Length == 0)
+            {
+                return BadRequest("Video file is null or empty");
+            }
+            string newID = await _checkExsistingID.GenerateUniqueID(
+                   _courseRepo.GetAllLessons,
+                   l => l.GetLessonID(),
+                   _generateID.generateLessonID
+              );
+            var orgPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var videoPath = Path.Combine(orgPath, "videos");
+            if (!Directory.Exists(videoPath))
+            {
+                Directory.CreateDirectory(videoPath);
+            }
+            var fileExt = Path.GetExtension(lesson.videoFile.FileName);
+            var fileName = $"{newID}{fileExt}"; 
+            // Đường dẫn lưu file
+            var savePath = Path.Combine(videoPath, fileName);
+
+            // Lưu file vào ổ đĩa
+            using (var stream = new FileStream(savePath, FileMode.Create))
+            {
+                await lesson.videoFile.CopyToAsync(stream);
+            }
+
+            // Trả về URL truy cập video
+            var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
             try
             {
-                string newID = await _checkExsistingID.GenerateUniqueID(
-                    _courseRepo.GetAllLessons,
-                    l => l.GetLessonID(),
-                    _generateID.generateLessonID
-                );
                 LessonModel lessonModel = new LessonModel(
                     newID,
                     lesson.lessonTitle,
-                    lesson.lessonURL,
+                    videoUrl,
                     lesson.courseID
                 );
                 bool isInserted = await _courseRepo.InsertLesson(lessonModel);
@@ -95,7 +118,11 @@ namespace E_learning.Controllers.Course
                 {
                     return BadRequest("Failed to insert lesson");
                 }
-                return CreatedAtAction(nameof(GetLessonsByCourseID), new { lesson.courseID }, lessonModel);
+                return Ok(new
+                {
+                    Message = "Lesson inserted successfully",
+                    Lesson = lessonModel
+                });
             }
             catch (Exception ex)
             {
@@ -103,5 +130,37 @@ namespace E_learning.Controllers.Course
                 return StatusCode(500, "Internal server error");
             }
         }
+
+        //[HttpPost("upload_video")]
+        //[ProducesResponseType(typeof(string), statusCode: 201)]
+        //[ProducesResponseType(StatusCodes.Status400BadRequest)]
+        //[ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        //public async Task<IActionResult> UploadVideo(IFormFile videoFile)
+        //{
+        //    if(videoFile == null || videoFile.Length == 0)
+        //    {
+        //        return BadRequest("Video file is null or empty");
+        //    }
+        //    var orgPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        //    var videoPath = Path.Combine(orgPath, "videos");
+        //    if(!Directory.Exists(videoPath))
+        //    {
+        //        Directory.CreateDirectory(videoPath);
+        //    }
+        //    var fileName = Path.GetFileName(videoFile.FileName);
+
+        //    // Đường dẫn lưu file
+        //    var savePath = Path.Combine(videoPath, fileName);
+
+        //    // Lưu file vào ổ đĩa
+        //    using (var stream = new FileStream(savePath, FileMode.Create))
+        //    {
+        //        await videoFile.CopyToAsync(stream);
+        //    }
+
+        //    // Trả về URL truy cập video
+        //    var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
+        //    return Ok(new { url = videoUrl });
+        //}
     }
 }

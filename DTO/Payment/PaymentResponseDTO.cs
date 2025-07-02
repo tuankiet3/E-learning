@@ -1,6 +1,6 @@
-﻿namespace E_learning.Model.Payment
+﻿namespace E_learning.DTO.Payment
 {
-    public class PaymentResponseModel
+    public class PaymentResponseDTO
     {
         public string OrderInfo { get; set; }
         public string TransactionId { get; set; }

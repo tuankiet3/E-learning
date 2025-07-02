@@ -50,5 +50,11 @@ namespace E_learning.Services
         public string generateLecturerID() => $"LEC{generateID()}";
         public string generateAdminID() => $"ADID{generateID()}";
 
+        public string GeneratePaymentID()
+        {
+            string numberString = generateID();
+            return $"PID{numberString}";
+        }
+
     }
 }
