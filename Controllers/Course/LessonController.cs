@@ -3,6 +3,7 @@ using E_learning.Model.Courses;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
+using E_learning.Services.Lesson;
 namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
@@ -13,12 +14,15 @@ namespace E_learning.Controllers.Course
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
         private readonly CheckExsistingID _checkExsistingID;
-        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID exsistingID)
+        private readonly ConvertURL _convertURL;
+        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID exsistingID, ConvertURL convertURL)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
             _checkExsistingID = exsistingID;
+            _convertURL = convertURL;
+
         }
         [HttpGet("GetLessonsByCourseID/{courseID}")]
         [ProducesResponseType(typeof(IEnumerable<LessonModel>), statusCode: 200)]
@@ -69,94 +73,57 @@ namespace E_learning.Controllers.Course
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> InsertLesson([FromForm] LessonDTO lesson)
         {
-            if (lesson == null)
-            {
-                return BadRequest("Lesson data is null");
-            }
-            if (lesson.videoFile == null || lesson.videoFile.Length == 0)
-            {
-                return BadRequest("Video file is null or empty");
-            }
-            string newID = await _checkExsistingID.GenerateUniqueID(
-                   _courseRepo.GetAllLessons,
-                   l => l.GetLessonID(),
-                   _generateID.generateLessonID
-              );
-            var orgPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-            var videoPath = Path.Combine(orgPath, "videos");
-            if (!Directory.Exists(videoPath))
-            {
-                Directory.CreateDirectory(videoPath);
-            }
-            var fileExt = Path.GetExtension(lesson.videoFile.FileName);
-            var fileName = $"{newID}{fileExt}"; 
-            // Đường dẫn lưu file
-            var savePath = Path.Combine(videoPath, fileName);
-
-            // Lưu file vào ổ đĩa
-            using (var stream = new FileStream(savePath, FileMode.Create))
-            {
-                await lesson.videoFile.CopyToAsync(stream);
-            }
-
-            // Trả về URL truy cập video
-            var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
             try
             {
-                LessonModel lessonModel = new LessonModel(
-                    newID,
+                string lessonID = await _checkExsistingID.GenerateUniqueID(
+                    _courseRepo.GetAllLessons,
+                    lesson => lesson.LessonID,
+                    _generateID.generateLessonID
+                );
+
+                _logger.LogInformation("🆕 Generating lesson ID: {lessonId}", lessonID);
+
+                await _convertURL.UploadVideo(lesson.videoFile, lessonID);
+
+                string conversionResult = await _convertURL.TryConvertWithRetry(lessonID);
+
+               
+                var fullUrl = $"{Request.Scheme}://{Request.Host}{conversionResult}";
+                var model = new LessonModel(
+                    lessonID,
                     lesson.lessonTitle,
-                    videoUrl,
+                    fullUrl,
                     lesson.courseID
                 );
-                bool isInserted = await _courseRepo.InsertLesson(lessonModel);
-                if (!isInserted)
+
+                bool inserted = await _courseRepo.InsertLesson(model);
+
+                if (!inserted)
                 {
-                    return BadRequest("Failed to insert lesson");
+                    await _convertURL.DeleteVideo(lessonID); // Clean up if insert fails
+                    return StatusCode(500, "Failed to insert lesson");
                 }
+
+                if (conversionResult.Contains("failed") || conversionResult.Contains("timed out"))
+                {
+                    return Ok(new
+                    {
+                        message = "Lesson inserted, but video conversion failed.",
+                        lesson = model
+                    });
+                }
+
                 return Ok(new
                 {
-                    Message = "Lesson inserted successfully",
-                    Lesson = lessonModel
+                    message = "Lesson inserted successfully",
+                    lesson = model
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error inserting lesson");
-                return StatusCode(500, "Internal server error");
+                _logger.LogError(ex, "❌ InsertLesson failed");
+                return StatusCode(500, "Unexpected error occurred: " + ex.Message);
             }
         }
-
-        //[HttpPost("upload_video")]
-        //[ProducesResponseType(typeof(string), statusCode: 201)]
-        //[ProducesResponseType(StatusCodes.Status400BadRequest)]
-        //[ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        //public async Task<IActionResult> UploadVideo(IFormFile videoFile)
-        //{
-        //    if(videoFile == null || videoFile.Length == 0)
-        //    {
-        //        return BadRequest("Video file is null or empty");
-        //    }
-        //    var orgPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-        //    var videoPath = Path.Combine(orgPath, "videos");
-        //    if(!Directory.Exists(videoPath))
-        //    {
-        //        Directory.CreateDirectory(videoPath);
-        //    }
-        //    var fileName = Path.GetFileName(videoFile.FileName);
-
-        //    // Đường dẫn lưu file
-        //    var savePath = Path.Combine(videoPath, fileName);
-
-        //    // Lưu file vào ổ đĩa
-        //    using (var stream = new FileStream(savePath, FileMode.Create))
-        //    {
-        //        await videoFile.CopyToAsync(stream);
-        //    }
-
-        //    // Trả về URL truy cập video
-        //    var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
-        //    return Ok(new { url = videoUrl });
-        //}
     }
 }

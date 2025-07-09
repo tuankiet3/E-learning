@@ -11,6 +11,7 @@ using E_learning.Repositories.Payment;
 using E_learning.Repositories.Enrollment;
 using E_learning.DAL.Payment;
 using E_learning.DAL.Enrollment;
+using E_learning.Services.Lesson;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,6 +36,7 @@ builder.Services.AddScoped<CheckExsistingID>();
 builder.Services.AddScoped<Normalize>();
 builder.Services.AddScoped<VnPayService>();
 builder.Services.AddScoped<VnPayLibrary>();
+builder.Services.AddScoped<ConvertURL>();
 // === CẤU HÌNH JWT AUTHENTICATION ===
 builder.Services.AddAuthentication(options =>
 {
