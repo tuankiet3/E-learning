@@ -63,7 +63,7 @@ namespace E_learning.DAL.Payment
                             decimal amount = reader.GetDecimal(reader.GetOrdinal("Amout"));
                             string courseId = reader.GetString(reader.GetOrdinal("CourseID"));
                             string buyerId = reader.GetString(reader.GetOrdinal("BuyerID"));
-                            var payment = new PaymentModel(paymentId, buyerName, description, amount, courseId,buyerId );
+                            var payment = new PaymentModel(paymentId, buyerName, description, amount, courseId, buyerId);
                             payments.Add(payment);
                         }
                     }
@@ -75,6 +75,32 @@ namespace E_learning.DAL.Payment
             }
             return payments;
         }
+        public async Task<List<string>> getAllPaymentIDAsync()
+        {
+            List<string> payments = new List<string>();
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    var query = "SELECT PaymentID FROM Payments";
+                    var command = new SqlCommand(query, connection);
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            string paymentId = reader.GetString(reader.GetOrdinal("PaymentID"));
+                            payments.Add(paymentId);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving payments from database.");
+            }
+            return payments;
 
+        }
     }
 }

@@ -2,21 +2,19 @@
 {
     public class CheckExsistingID
     {
-        public async Task<string> GenerateUniqueID<TModel>(Func<Task<List<TModel>>> getAllFunc,Func<TModel, string> getIDFunc, Func<string> generateIDFunc)
-        {
-            var existingModels = await getAllFunc();
-            var existingIDs = existingModels
-                .Select(getIDFunc)
-                .ToHashSet();
-
+        public async Task<string> GenerateUniqueIDForStringList(
+                     Func<Task<List<string>>> getAllIDsFunc,
+                     Func<string> generateIDFunc)
+                        {
+            var existingIDs = (await getAllIDsFunc()).ToHashSet();
             string newID;
             do
             {
                 newID = generateIDFunc();
-            }
-            while (existingIDs.Contains(newID));
+            } while (existingIDs.Contains(newID));
 
             return newID;
         }
+
     }
 }

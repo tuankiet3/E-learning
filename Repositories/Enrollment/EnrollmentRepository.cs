@@ -13,5 +13,6 @@ namespace E_learning.Repositories.Enrollment
         public Task<bool> InsertEnrollment(EnrollmentModel enrollment) => _enrollmentDAL.InsertEnrollment(enrollment);
         public Task<List<EnrollmentModel>> GetAllEnrollments() => _enrollmentDAL.GetAllEnrollments();
         public Task<List<EnrollmentModel>> getEnrollbyUserID(string userID) => _enrollmentDAL.getEnrollbyUserID(userID);
+        public Task<List<string>> GetAllEnrollmentsID() => _enrollmentDAL.GetAllEnrollmentsID();
     }
 }

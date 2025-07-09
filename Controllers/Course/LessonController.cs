@@ -77,9 +77,8 @@ namespace E_learning.Controllers.Course
         {
             try
             {
-                string lessonID = await _checkExsistingID.GenerateUniqueID(
-                    _courseRepo.GetAllLessons,
-                    lesson => lesson.LessonID,
+                string lessonID = await _checkExsistingID.GenerateUniqueIDForStringList(
+                    _courseRepo.GetAllLessonsID,
                     _generateID.generateLessonID
                 );
 

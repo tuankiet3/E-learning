@@ -20,5 +20,9 @@ namespace E_learning.Repositories.Payment
         {
             return _paymentDAL.SavePaymentAsync(paymentModel);
         }
+        public Task<List<string>> getAllPaymentIDAsync()
+        {
+            return _paymentDAL.getAllPaymentIDAsync();
+        }
     }
 }

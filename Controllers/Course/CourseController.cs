@@ -56,9 +56,8 @@ namespace E_learning.Controllers.Course
             }
             try
             {
-                string newID = await _checkExsistingID.GenerateUniqueID(
-                    _courseRepo.GetAllCourses,
-                    c => c.GetCourseID(),
+                string newID = await _checkExsistingID.GenerateUniqueIDForStringList(
+                    _courseRepo.GetAllCoursesID,
                     _generateID.generateCourseID
                 );
                 CoursesModel courseModel = new CoursesModel(

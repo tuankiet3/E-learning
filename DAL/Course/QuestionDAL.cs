@@ -13,15 +13,15 @@ namespace E_learning.DAL.Course
             _connectionString = configuration.GetConnectionString("SqlServerConnection");
             _logger = logger;
         }
-        public async Task<List<QuestionModel>> getALLQuestion()
+        public async Task<List<string>> getALLQuestionID()
         {
-            List<QuestionModel> questions = new List<QuestionModel>();
+            List<string> questions = new List<string>();
             try
             {
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Question ";
+                    string query = "SELECT QuestionID FROM Question ";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
@@ -29,10 +29,7 @@ namespace E_learning.DAL.Course
                             while (await reader.ReadAsync())
                             {
                                 string questionID = reader.GetString(reader.GetOrdinal("QuestionID"));
-                                string questionText = reader.GetString(reader.GetOrdinal("QuestionContent"));
-                                string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
-                                QuestionModel question = new QuestionModel(questionID, questionText, quizID);
-                                questions.Add(question);
+                                questions.Add(questionID);
                             }
                         }
                     }

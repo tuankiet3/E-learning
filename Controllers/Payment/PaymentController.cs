@@ -56,9 +56,8 @@ namespace E_learning.Controllers.Payment
         {
             var response = _vnPayService.PaymentExecute(HttpContext.Request.Query);
             Console.WriteLine("Response: " + response.OrderInfo);
-            string newPaymentID = await _checkExsistingID.GenerateUniqueID(
-                _paymentRepository.getAllPaymentAsync,
-                r => r.GetPaymentID(),
+            string newPaymentID = await _checkExsistingID.GenerateUniqueIDForStringList(
+                _paymentRepository.getAllPaymentIDAsync,
                 _generateID.GeneratePaymentID
             );
 

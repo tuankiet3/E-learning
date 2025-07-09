@@ -96,15 +96,15 @@ namespace E_learning.DAL.Course
             }
         }
         // lấy hết Quiz
-        public async Task<List<QuizModel>> GetAllQuiz()
+        public async Task<List<string>> GetAllQuizID()
         {
-            List<QuizModel> quizzes = new List<QuizModel>();
+            List<string> quizzes = new List<string>();
             try
             {
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Quiz";
+                    string query = "SELECT QuizID FROM Quiz";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
@@ -112,10 +112,8 @@ namespace E_learning.DAL.Course
                             while (await reader.ReadAsync())
                             {
                                 string quizID = reader.GetString(reader.GetOrdinal("QuizID"));
-                                string quizTitle = reader.GetString(reader.GetOrdinal("QuizTitle"));
-                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
-                                QuizModel quiz = new QuizModel(quizID, quizTitle, courseID);
-                                quizzes.Add(quiz);
+                               
+                                quizzes.Add(quizID);
                             }
                         }
                     }

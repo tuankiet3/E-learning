@@ -80,9 +80,8 @@ namespace E_learning.Controllers.Course
             }
             try
             {
-                string newQuestionID = await _checkExsistingID.GenerateUniqueID(
-                    _courseRepo.getALLQuestion,
-                    q => q.GetQuestionID(),
+                string newQuestionID = await _checkExsistingID.GenerateUniqueIDForStringList(
+                    _courseRepo.getALLQuestionID,
                     _generateID.GenerateQuestionID);
                 QuestionModel newQuestion = new QuestionModel
                 (

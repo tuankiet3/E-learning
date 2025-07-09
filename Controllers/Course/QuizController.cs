@@ -76,7 +76,7 @@ namespace E_learning.Controllers.Course
             }
             try
             {
-                string newID = await _checkExsistingID.GenerateUniqueID(_courseRepo.GetAllQuiz, q => q.getQuizID(), _generateID.generateQuizID
+                string newID = await _checkExsistingID.GenerateUniqueIDForStringList(_courseRepo.GetAllQuizID, _generateID.generateQuizID
                 );
                 QuizModel quizModel = new QuizModel(
                     newID,

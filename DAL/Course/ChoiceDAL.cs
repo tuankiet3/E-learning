@@ -100,15 +100,15 @@ namespace E_learning.DAL.Course
             }
         }
         // lấy hết choices
-        public async Task<List<ChoiceModel>> getAllChoice()
+        public async Task<List<string>> getAllChoiceID()
         {
-            List<ChoiceModel> choices = new List<ChoiceModel>();
+            List<string> choices = new List<string>();
             try
             {
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Choices";
+                    string query = "SELECT ChoiceID FROM Choices";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
@@ -116,11 +116,7 @@ namespace E_learning.DAL.Course
                             while (await reader.ReadAsync())
                             {
                                 string choiceID = reader.GetString(reader.GetOrdinal("ChoiceID"));
-                                string choiceText = reader.GetString(reader.GetOrdinal("ChoiceText"));
-                                bool isCorrect = reader.GetBoolean(reader.GetOrdinal("IsCorrect"));
-                                string QuestionID = reader.GetString(reader.GetOrdinal("QuestionID"));
-                                ChoiceModel choice = new ChoiceModel(choiceID, choiceText, isCorrect, QuestionID);
-                                choices.Add(choice);
+                                choices.Add(choiceID);
                             }
                         }
                     }

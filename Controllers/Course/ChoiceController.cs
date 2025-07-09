@@ -79,7 +79,7 @@ namespace E_learning.Controllers.Course
             }
             try
             {
-                string newID = await _checkExsistingID.GenerateUniqueID(_courseRepo.getAllChoice, c => c.GetChoiceID(), _generateID.generateChoiceID);
+                string newID = await _checkExsistingID.GenerateUniqueIDForStringList(_courseRepo.getAllChoiceID, _generateID.generateChoiceID);
                 ChoiceModel choiceModel = new ChoiceModel(
                     newID,
                     choice.ChoiceText,

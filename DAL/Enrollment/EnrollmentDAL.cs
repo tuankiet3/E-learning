@@ -69,7 +69,35 @@ namespace E_learning.DAL.Enrollment
             }
             return enrollments;
         }
+        public async Task<List<string>> GetAllEnrollmentsID()
+        {
+            List<string> enrollments = new List<string>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT EnrollmentID FROM Enrollments";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string enrollmentID = reader.GetString(reader.GetOrdinal("EnrollmentID"));
 
+                                enrollments.Add(enrollmentID);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving enrollments");
+            }
+            return enrollments;
+        }
         public async Task<List<EnrollmentModel>> getEnrollbyUserID(string userID)
         {
             List<EnrollmentModel> enrollments = new List<EnrollmentModel>();

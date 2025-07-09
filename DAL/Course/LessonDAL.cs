@@ -99,15 +99,15 @@ namespace E_learning.DAL.Course
             }
         }
         // lấy hết lesson
-        public async Task<List<LessonModel>> GetAllLessons()
+        public async Task<List<string>> GetAllLessonsID()
         {
-            List<LessonModel> lessons = new List<LessonModel>();
+            List<string> lessons = new List<string>();
             try
             {
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Lessons";
+                    string query = "SELECT LessonID FROM Lessons";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
@@ -115,11 +115,8 @@ namespace E_learning.DAL.Course
                             while (await reader.ReadAsync())
                             {
                                 string lessonID = reader.GetString(reader.GetOrdinal("LessonID"));
-                                string lessonTitle = reader.GetString(reader.GetOrdinal("LessonTitle"));
-                                string lessonURL = reader.GetString(reader.GetOrdinal("LessonURL"));
-                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
-                                LessonModel lesson = new LessonModel(lessonID, lessonTitle, lessonURL, courseID);
-                                lessons.Add(lesson);
+                                
+                                lessons.Add(lessonID);
                             }
                         }
                     }

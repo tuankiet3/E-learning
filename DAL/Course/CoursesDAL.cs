@@ -38,10 +38,37 @@ namespace E_learning.DAL.Course
                                 decimal coursePrice = reader.GetDecimal(reader.GetOrdinal("CoursePrice"));
                                 string courseDescription = reader.GetString(reader.GetOrdinal("CourseDescription"));
                                 string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
-                                Console.WriteLine("ádasd" + courseID + courseName + coursePrice + courseDescription + authorID);
                                 CoursesModel course = new CoursesModel(courseID, courseName, coursePrice, courseDescription, authorID);
-                                Console.WriteLine("ádasd0" + course);
                                 courses.Add(course);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving courses");
+            }
+            return courses;
+        }
+        public async Task<List<string>> getAllCourseID()
+        {
+            List<string> courses = new List<string>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "select CourseID from Courses";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
+                               
+                                courses.Add(courseID);
                             }
                         }
                     }

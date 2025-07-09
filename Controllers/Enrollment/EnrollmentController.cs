@@ -57,7 +57,7 @@ namespace E_learning.Controllers.Enrollment
             }
             try
             {
-                string newID = await _checkExsistingID.GenerateUniqueID(_enrollmentRepo.GetAllEnrollments,e => e.GetEnrollmentID(), _generateID.GenerateEnrollmentID);
+                string newID = await _checkExsistingID.GenerateUniqueIDForStringList(_enrollmentRepo.GetAllEnrollmentsID, _generateID.GenerateEnrollmentID);
                 EnrollmentModel enrollmen = new EnrollmentModel(
                     newID,
                     enrollment.UserID,
