@@ -4,6 +4,8 @@ using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
 using E_learning.Services.Lesson;
+using Microsoft.AspNetCore.Authorization;
+using System.Text.RegularExpressions;
 namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
@@ -124,6 +126,57 @@ namespace E_learning.Controllers.Course
                 _logger.LogError(ex, "❌ InsertLesson failed");
                 return StatusCode(500, "Unexpected error occurred: " + ex.Message);
             }
+        }
+
+        [Authorize]
+        [AcceptVerbs("GET", "HEAD")]
+        [Route("authorize")]
+        public async Task<IActionResult> AuthorizeVideoAccess()
+        {
+            var uri = Request.Headers["X-Original-URI"].ToString();
+            Console.WriteLine("🔍 Header X-Original-URI = " + uri);
+
+            if (string.IsNullOrEmpty(uri))
+            {
+                Console.WriteLine("❌ X-Original-URI header is missing or empty.");
+                return BadRequest();
+            }
+
+            var match = Regex.Match(uri, @"^/secure/videos/([^/]+)/");
+            if (!match.Success)
+            {
+                Console.WriteLine("❌ Invalid video URL format.");
+                return BadRequest();
+            }
+
+            var lessonId = match.Groups[1].Value;
+            var userId = User.FindFirst("UserID")?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                Console.WriteLine("❌ User ID is missing in the token.");
+                return Unauthorized();
+            }
+
+            bool hasAccess = await _courseRepo.checkBuyCourse(userId, lessonId);
+            if (!hasAccess)
+            {
+                Console.WriteLine($"❌ User {userId} does not have access to lesson {lessonId}.");
+                return Forbid();
+            }
+
+            Console.WriteLine($"✅ User {userId} is authorized to access lesson {lessonId}.");
+
+            // 🔥 Trả về rỗng nếu là HEAD (nghĩa là NGINX gọi), tránh lỗi upstream
+            if (HttpContext.Request.Method == HttpMethods.Head)
+            {
+                Console.WriteLine("🔍 HEAD request received, returning 200 OK without body.");
+                return Ok(); // trả về 200 OK, không body
+            }
+
+            // Nếu là GET, trả về thông báo thành công
+            Console.WriteLine("✅ Access granted for GET request.");
+            return Ok(new { message = "Access granted" }); // nếu bạn test thủ công qua GET
         }
     }
 }

@@ -131,5 +131,28 @@ namespace E_learning.DAL.Course
             }
             return lessons;
         }
+        public async Task<bool> checkBuyCourse(string userID, string lessonID)
+        {
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    string query = "SELECT COUNT(*) FROM Enrollment WHERE UserID = @UserID AND LessonID = @LessonID";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@UserID", userID);
+                        command.Parameters.AddWithValue("@LessonID", lessonID);
+                        int count = (int)await command.ExecuteScalarAsync();
+                        return count > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log the exception (not implemented here)
+                return false;
+            }
+        }
     }
 }

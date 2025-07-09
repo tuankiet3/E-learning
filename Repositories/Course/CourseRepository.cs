@@ -37,6 +37,7 @@ namespace E_learning.Repositories.Course
         public Task<bool> DeleteLessons(string lessionID) => _lessonDAL.deleteLesson(lessionID);
         public Task<bool> InsertLesson(LessonModel lesson) => _lessonDAL.insertLesson(lesson);
         public Task<List<LessonModel>> GetAllLessons() => _lessonDAL.GetAllLessons();
+        public Task<bool> checkBuyCourse(string userID, string lessonID) => _lessonDAL.checkBuyCourse(userID, lessonID);
         // Quiz methods
         public Task<List<QuizModel>> GetQuizzesByCourseID(string courseID) => _quizDAL.GetQuizByCourseID(courseID);
         public Task<bool> DeleteQuiz(string quizID) => _quizDAL.DeleteQuiz(quizID);
