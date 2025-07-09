@@ -12,7 +12,13 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using E_learning.Repositories.Payment;
 using E_learning.DAL.Payment;
+<<<<<<< HEAD
 using E_learning.Services.Zoom;
+=======
+using E_learning.DAL.Enrollment;
+using E_learning.Services.Lesson;
+
+>>>>>>> 80fe94d7003cd1b98018f9d149a025dab6424f68
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,6 +67,7 @@ builder.Services.AddScoped<CheckExsistingID>();
 builder.Services.AddScoped<Normalize>();
 builder.Services.AddScoped<VnPayService>();
 builder.Services.AddScoped<VnPayLibrary>();
+builder.Services.AddScoped<ConvertURL>();
 // === CẤU HÌNH JWT AUTHENTICATION ===
 builder.Services.AddAuthentication(options =>
 {

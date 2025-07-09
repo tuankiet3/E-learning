@@ -17,6 +17,7 @@ namespace E_learning.Repositories.Course
             Task<bool> DeleteLessons(string courseID);
             Task<bool> InsertLesson(LessonModel lesson);
             Task<List<LessonModel>> GetAllLessons();
+            Task<bool> checkBuyCourse(string userID, string lessonID);
 
         // Quizzes
         Task<List<QuizModel>> GetQuizzesByCourseID(string courseID);
