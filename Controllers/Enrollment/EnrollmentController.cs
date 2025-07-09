@@ -1,15 +1,16 @@
 ﻿using E_learning.DTO.Enrollment;
-using E_learning.Model.Courses;
 using E_learning.Model.Enrollment;
 using E_learning.Repositories.Enrollment;
 using E_learning.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using E_learning.Enums;
 
 namespace E_learning.Controllers.Enrollment
 {
     [ApiController]
     [Route("api/[controller]")]
-   
+    [Authorize]
     public class EnrollmentController : ControllerBase
     {
         private readonly ILogger<EnrollmentController> _logger;
@@ -23,10 +24,9 @@ namespace E_learning.Controllers.Enrollment
             _generateID = generateID;
             _checkExsistingID = checkExsistingID;
         }
+
         [HttpGet("GetAllEnrollments")]
-        [ProducesResponseType(typeof(IEnumerable<EnrollmentModel>), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = nameof(UserRole.Admin))]
         public async Task<IActionResult> GetAllEnrollments()
         {
             try
@@ -46,9 +46,7 @@ namespace E_learning.Controllers.Enrollment
         }
 
         [HttpPost("InsertEnrollment")]
-        [ProducesResponseType(typeof(EnrollmentModel), statusCode: 201)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = nameof(UserRole.Student))]
         public async Task<IActionResult> InsertEnrollment([FromBody] EnrollmentDTO enrollment)
         {
             if (enrollment == null)
@@ -57,7 +55,7 @@ namespace E_learning.Controllers.Enrollment
             }
             try
             {
-                string newID = await _checkExsistingID.GenerateUniqueID(_enrollmentRepo.GetAllEnrollments,e => e.GetEnrollmentID(), _generateID.GenerateEnrollmentID);
+                string newID = await _checkExsistingID.GenerateUniqueID(_enrollmentRepo.GetAllEnrollments, e => e.GetEnrollmentID(), _generateID.GenerateEnrollmentID);
                 EnrollmentModel enrollmen = new EnrollmentModel(
                     newID,
                     enrollment.UserID,
@@ -69,8 +67,6 @@ namespace E_learning.Controllers.Enrollment
                     return BadRequest("Enrollment could not be inserted");
                 }
                 return CreatedAtAction(nameof(GetAllEnrollments), new { id = newID }, enrollmen);
-
-
             }
             catch (Exception ex)
             {
@@ -80,9 +76,6 @@ namespace E_learning.Controllers.Enrollment
         }
 
         [HttpGet("GetEnrollmentsByUserID/{userID}")]
-        [ProducesResponseType(typeof(IEnumerable<EnrollmentModel>), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetEnrollmentsByUserID(string userID)
         {
             try

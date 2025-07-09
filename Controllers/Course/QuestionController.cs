@@ -3,13 +3,14 @@ using E_learning.Model.Courses;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
-
+using Microsoft.AspNetCore.Authorization;
+using E_learning.Enums;
 
 namespace E_learning.Controllers.Course
 {
-
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class QuestionController : Controller
     {
         private readonly ILogger<CourseController> _logger;
@@ -24,11 +25,7 @@ namespace E_learning.Controllers.Course
             _checkExsistingID = checkExsistingID;
         }
 
-
         [HttpGet("GetQuestionsByQuizID/{quizID}")]
-        [ProducesResponseType(typeof(IEnumerable<QuestionModel>), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetQuestionsByQuizID(string quizID)
         {
             try
@@ -46,10 +43,9 @@ namespace E_learning.Controllers.Course
                 return StatusCode(500, "Internal server error");
             }
         }
+
         [HttpDelete("DeleteQuestion/{questionID}")]
-        [ProducesResponseType(statusCode: 204)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> DeleteQuestion(string questionID)
         {
             try
@@ -69,9 +65,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpPost("InsertQuestion")]
-        [ProducesResponseType(typeof(QuestionModel), statusCode: 201)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> InsertQuestion([FromBody] QuestionDTO question)
         {
             if (question == null)
@@ -84,8 +78,8 @@ namespace E_learning.Controllers.Course
                     _courseRepo.getALLQuestion,
                     q => q.GetQuestionID(),
                     _generateID.GenerateQuestionID);
-                QuestionModel newQuestion = new QuestionModel
-                (
+
+                QuestionModel newQuestion = new QuestionModel(
                     newQuestionID,
                     question.questionContent,
                     question.quizID
@@ -104,4 +98,4 @@ namespace E_learning.Controllers.Course
             }
         }
     }
-} 
+}

@@ -1,5 +1,5 @@
 ﻿using E_learning.DTO.Zoom;
-using E_learning.Services;
+using E_learning.Services.Zoom;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;

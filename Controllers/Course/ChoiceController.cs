@@ -3,30 +3,29 @@ using E_learning.Model.Courses;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
+using Microsoft.AspNetCore.Authorization;
+using E_learning.Enums;
+
 namespace E_learning.Controllers.Course
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class ChoiceController : ControllerBase 
+    [Authorize]
+    public class ChoiceController : ControllerBase
     {
         private readonly ILogger<CourseController> _logger;
         private readonly ICourseRepository _courseRepo;
         private readonly GenerateID _generateID;
         private readonly CheckExsistingID _checkExsistingID;
-
         public ChoiceController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID checkExsistingID)
         {
             _logger = logger;
             _courseRepo = courseRepo;
             _generateID = generateID;
             _checkExsistingID = checkExsistingID;
-
         }
 
         [HttpGet("GetChoicesByQuizID/{quizID}")]
-        [ProducesResponseType(typeof(IEnumerable<ChoiceModel>), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetChoicesByQuizID(string quizID)
         {
             try
@@ -46,9 +45,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpDelete("DeleteChoice/{choiceID}")]
-        [ProducesResponseType(statusCode: 204)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> DeleteChoice(string choiceID)
         {
             try
@@ -68,9 +65,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpPost("InsertChoice")]
-        [ProducesResponseType(typeof(ChoiceModel), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> InsertChoice([FromBody] ChoiceDTO choice)
         {
             if (choice == null)
@@ -91,7 +86,7 @@ namespace E_learning.Controllers.Course
                 {
                     return BadRequest("Failed to insert choice");
                 }
-                return Ok(new {Message = "Choice inserted successfully.", Choice = choiceModel });
+                return Ok(new { Message = "Choice inserted successfully.", Choice = choiceModel });
             }
             catch (Exception ex)
             {

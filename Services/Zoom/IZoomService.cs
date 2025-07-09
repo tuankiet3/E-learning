@@ -1,7 +1,7 @@
 ﻿using E_learning.DTO.Zoom;
 using E_learning.Model.Zoom;
 
-namespace E_learning.Services
+namespace E_learning.Services.Zoom
 {
     public interface IZoomService
     {

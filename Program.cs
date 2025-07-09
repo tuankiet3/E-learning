@@ -12,6 +12,7 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using E_learning.Repositories.Payment;
 using E_learning.DAL.Payment;
+using E_learning.Services.Zoom;
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -3,10 +3,14 @@ using E_learning.Model.Courses;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
+using Microsoft.AspNetCore.Authorization;
+using E_learning.Enums;
+
 namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class LessonController : ControllerBase
     {
         private readonly ILogger<CourseController> _logger;
@@ -20,10 +24,8 @@ namespace E_learning.Controllers.Course
             _generateID = generateID;
             _checkExsistingID = exsistingID;
         }
+
         [HttpGet("GetLessonsByCourseID/{courseID}")]
-        [ProducesResponseType(typeof(IEnumerable<LessonModel>), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetLessonsByCourseID(string courseID)
         {
             try
@@ -43,9 +45,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpDelete("DeleteLesson/{lessonID}")]
-        [ProducesResponseType(statusCode: 204)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> DeleteLesson(string lessonID)
         {
             try
@@ -63,10 +63,9 @@ namespace E_learning.Controllers.Course
                 return StatusCode(500, "Internal server error");
             }
         }
+
         [HttpPost("InsertLesson")]
-        [ProducesResponseType(typeof(LessonModel), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> InsertLesson([FromForm] LessonDTO lesson)
         {
             if (lesson == null)
@@ -89,17 +88,13 @@ namespace E_learning.Controllers.Course
                 Directory.CreateDirectory(videoPath);
             }
             var fileExt = Path.GetExtension(lesson.videoFile.FileName);
-            var fileName = $"{newID}{fileExt}"; 
-            // Đường dẫn lưu file
+            var fileName = $"{newID}{fileExt}";
             var savePath = Path.Combine(videoPath, fileName);
-
-            // Lưu file vào ổ đĩa
             using (var stream = new FileStream(savePath, FileMode.Create))
             {
                 await lesson.videoFile.CopyToAsync(stream);
             }
 
-            // Trả về URL truy cập video
             var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
             try
             {
@@ -126,37 +121,38 @@ namespace E_learning.Controllers.Course
                 return StatusCode(500, "Internal server error");
             }
         }
-
-        //[HttpPost("upload_video")]
-        //[ProducesResponseType(typeof(string), statusCode: 201)]
-        //[ProducesResponseType(StatusCodes.Status400BadRequest)]
-        //[ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        //public async Task<IActionResult> UploadVideo(IFormFile videoFile)
-        //{
-        //    if(videoFile == null || videoFile.Length == 0)
-        //    {
-        //        return BadRequest("Video file is null or empty");
-        //    }
-        //    var orgPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-        //    var videoPath = Path.Combine(orgPath, "videos");
-        //    if(!Directory.Exists(videoPath))
-        //    {
-        //        Directory.CreateDirectory(videoPath);
-        //    }
-        //    var fileName = Path.GetFileName(videoFile.FileName);
-
-        //    // Đường dẫn lưu file
-        //    var savePath = Path.Combine(videoPath, fileName);
-
-        //    // Lưu file vào ổ đĩa
-        //    using (var stream = new FileStream(savePath, FileMode.Create))
-        //    {
-        //        await videoFile.CopyToAsync(stream);
-        //    }
-
-        //    // Trả về URL truy cập video
-        //    var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
-        //    return Ok(new { url = videoUrl });
-        //}
     }
 }
+
+
+//[HttpPost("upload_video")]
+//[ProducesResponseType(typeof(string), statusCode: 201)]
+//[ProducesResponseType(StatusCodes.Status400BadRequest)]
+//[ProducesResponseType(StatusCodes.Status500InternalServerError)]
+//public async Task<IActionResult> UploadVideo(IFormFile videoFile)
+//{
+//    if(videoFile == null || videoFile.Length == 0)
+//    {
+//        return BadRequest("Video file is null or empty");
+//    }
+//    var orgPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+//    var videoPath = Path.Combine(orgPath, "videos");
+//    if(!Directory.Exists(videoPath))
+//    {
+//        Directory.CreateDirectory(videoPath);
+//    }
+//    var fileName = Path.GetFileName(videoFile.FileName);
+
+//    // Đường dẫn lưu file
+//    var savePath = Path.Combine(videoPath, fileName);
+
+//    // Lưu file vào ổ đĩa
+//    using (var stream = new FileStream(savePath, FileMode.Create))
+//    {
+//        await videoFile.CopyToAsync(stream);
+//    }
+
+//    // Trả về URL truy cập video
+//    var videoUrl = $"{Request.Scheme}://{Request.Host}/videos/{fileName}";
+//    return Ok(new { url = videoUrl });
+//}

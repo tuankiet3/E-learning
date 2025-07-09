@@ -6,7 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace E_learning.Services
+namespace E_learning.Services.Zoom
 {
     public class ZoomService : IZoomService
     {

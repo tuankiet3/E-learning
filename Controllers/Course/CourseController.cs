@@ -3,10 +3,14 @@ using E_learning.Model.Courses;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
+using Microsoft.AspNetCore.Authorization;
+using E_learning.Enums;
+
 namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class CourseController : Controller
     {
         private readonly ILogger<CourseController> _logger;
@@ -22,9 +26,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpGet("GetAllCourses")]
-        [ProducesResponseType(typeof(IEnumerable<CoursesModel>), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [AllowAnonymous]
         public async Task<IActionResult> GetAllCourses()
         {
             try
@@ -45,9 +47,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpPost("InsertCourse")]
-        [ProducesResponseType(typeof(CoursesModel), statusCode: 201)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> InsertCourse([FromBody] CourseDTO course)
         {
             if (course == null)
@@ -86,9 +86,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpDelete("DeleteCourse/{courseID}")]
-        [ProducesResponseType(StatusCodes.Status204NoContent)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = nameof(UserRole.Admin))]
         public async Task<IActionResult> DeleteCourse(string courseID)
         {
             if (string.IsNullOrEmpty(courseID))
@@ -115,9 +113,7 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpGet("GetCourseByID/{courseID}")]
-        [ProducesResponseType(typeof(CoursesModel), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [AllowAnonymous]
         public async Task<IActionResult> GetCourseByID(string courseID)
         {
             if (string.IsNullOrEmpty(courseID))

@@ -3,10 +3,14 @@ using Microsoft.AspNetCore.Mvc;
 using E_learning.Model.Courses;
 using E_learning.DTO.Course;
 using E_learning.Repositories.Course;
+using Microsoft.AspNetCore.Authorization;
+using E_learning.Enums;
+
 namespace E_learning.Controllers.Course
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class QuizController : ControllerBase
     {
         private readonly ILogger<CourseController> _logger;
@@ -23,9 +27,6 @@ namespace E_learning.Controllers.Course
         }
 
         [HttpGet("GetQuizzesByCourseID/{courseID}")]
-        [ProducesResponseType(typeof(IEnumerable<QuizModel>), statusCode: 200)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetQuizzesByCourseID(string courseID)
         {
             try
@@ -43,10 +44,9 @@ namespace E_learning.Controllers.Course
                 return StatusCode(500, "Internal server error");
             }
         }
+
         [HttpDelete("DeleteQuiz/{quizID}")]
-        [ProducesResponseType(statusCode: 204)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> DeleteQuiz(string quizID)
         {
             try
@@ -64,10 +64,9 @@ namespace E_learning.Controllers.Course
                 return StatusCode(500, "Internal server error");
             }
         }
+
         [HttpPost("InsertQuiz")]
-        [ProducesResponseType(typeof(QuizModel), statusCode: 201)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = $"{nameof(UserRole.Lecturer)},{nameof(UserRole.Admin)}")]
         public async Task<IActionResult> InsertQuiz([FromBody] QuizDTO quiz)
         {
             if (quiz == null)
@@ -88,7 +87,7 @@ namespace E_learning.Controllers.Course
                 {
                     return BadRequest("Failed to insert quiz");
                 }
-                return CreatedAtAction(nameof(GetQuizzesByCourseID), new { quiz.courseID }, quizModel);
+                return CreatedAtAction(nameof(GetQuizzesByCourseID), new { courseID = quiz.courseID }, quizModel);
             }
             catch (Exception ex)
             {
