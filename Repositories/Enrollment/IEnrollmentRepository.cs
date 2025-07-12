@@ -6,7 +6,7 @@ namespace E_learning.Repositories.Enrollment
     {
         Task<List<EnrollmentModel>> getEnrollbyUserID(string userID);
         Task<bool> InsertEnrollment(EnrollmentModel enrollment);
-        Task<List<EnrollmentModel>> GetAllEnrollments();
+        Task<List<EnrollmentModel>> GetAllEnrollments(int offset, int fetchnext);
         Task<List<string>> GetAllEnrollmentsID();
     }
 }

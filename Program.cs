@@ -12,6 +12,11 @@ using E_learning.Repositories.Enrollment;
 using E_learning.DAL.Payment;
 using E_learning.DAL.Enrollment;
 using E_learning.Services.Lesson;
+using E_learning.Model.cloudeDB;
+using Microsoft.Extensions.Options;
+using Amazon.S3;
+using StackExchange.Redis;
+using E_learning.Services.Cloude;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,6 +42,8 @@ builder.Services.AddScoped<Normalize>();
 builder.Services.AddScoped<VnPayService>();
 builder.Services.AddScoped<VnPayLibrary>();
 builder.Services.AddScoped<ConvertURL>();
+builder.Services.AddScoped<BackblazeService>();
+builder.Services.AddScoped<RedisService>();
 // === CẤU HÌNH JWT AUTHENTICATION ===
 builder.Services.AddAuthentication(options =>
 {
@@ -59,6 +66,36 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Configure BackBlaze S3 client
+builder.Services.Configure<BackBlazeModel>(builder.Configuration.GetSection("BackBlaze"));
+builder.Services.AddSingleton<IAmazonS3>(sp =>
+{
+    var settings = sp.GetRequiredService<IOptions<BackBlazeModel>>().Value;
+
+    var config = new AmazonS3Config
+    {
+        ServiceURL = settings.EndPoint,
+        ForcePathStyle = true
+    };
+
+    return new AmazonS3Client(settings.KeyId, settings.ApplicationKey, config);
+});
+
+// Configure Redis cache
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    var config = new ConfigurationOptions
+    {
+        EndPoints = { "localhost:6379" },
+        Password = "foobared",
+        Ssl = false,
+        AbortOnConnectFail = false // ❗ Cho phép tiếp tục thử lại nếu Redis khởi động chậm
+    };
+
+    return ConnectionMultiplexer.Connect(config);
+});
+
 
 var app = builder.Build();
 

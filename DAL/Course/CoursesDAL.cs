@@ -18,7 +18,7 @@ namespace E_learning.DAL.Course
             _logger = logger;
         }
         // lấy toàn bộ khóa học`
-        public async Task<List<CoursesModel>> getAllCourse()
+        public async Task<List<CoursesModel>> getAllCourse(int offset, int fetchnext)
         {
             List<CoursesModel> courses = new List<CoursesModel>();
             try
@@ -26,9 +26,12 @@ namespace E_learning.DAL.Course
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "select * from Courses";
+                    string query = @"SELECT CourseID, CourseName, CoursePrice, CourseDescription, AuthorID FROM Courses ORDER BY CourseID OFFSET @offset ROWS FETCH NEXT @fetchnext ROWS ONLY";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
+                        command.Parameters.AddWithValue("@offset", offset);
+                        command.Parameters.AddWithValue("@fetchnext", fetchnext);
+                        Console.WriteLine("Step 1");
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
                         {
                             while (await reader.ReadAsync())
@@ -39,6 +42,7 @@ namespace E_learning.DAL.Course
                                 string courseDescription = reader.GetString(reader.GetOrdinal("CourseDescription"));
                                 string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
                                 CoursesModel course = new CoursesModel(courseID, courseName, coursePrice, courseDescription, authorID);
+                                Console.WriteLine("Step 2");
                                 courses.Add(course);
                             }
                         }

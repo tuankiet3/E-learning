@@ -25,12 +25,11 @@ namespace E_learning.Controllers.Course
         [ProducesResponseType(typeof(IEnumerable<CoursesModel>), statusCode: 200)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetAllCourses()
+        public async Task<IActionResult> GetAllCourses(int offset, int fetchnext)
         {
             try
             {
-                List<CoursesModel> courses = await _courseRepo.GetAllCourses();
-                Console.WriteLine(courses);
+                List<CoursesModel> courses = await _courseRepo.GetAllCourses(offset, fetchnext);
                 if (courses == null || courses.Count == 0)
                 {
                     return NotFound("No courses found");

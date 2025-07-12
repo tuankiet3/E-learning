@@ -28,7 +28,7 @@ namespace E_learning.Repositories.Course
         }
         // Course methods
         public Task<List<string>> GetAllCoursesID() => _coursesDAL.getAllCourseID();
-        public Task<List<CoursesModel>> GetAllCourses() => _coursesDAL.getAllCourse();
+        public Task<List<CoursesModel>> GetAllCourses(int offset, int fetchnext) => _coursesDAL.getAllCourse(offset, fetchnext);
         public Task<CoursesModel> GetCourseByID(string courseID) => _coursesDAL.getCourseByID(courseID);
         public Task<bool> InsertCourse(CoursesModel course) => _coursesDAL.InsertCourse(course);
         public Task<bool> DeleteCourse(string courseID) => _coursesDAL.deleteCourse(courseID);

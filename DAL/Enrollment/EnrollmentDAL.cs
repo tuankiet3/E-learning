@@ -38,7 +38,7 @@ namespace E_learning.DAL.Enrollment
             }
         }
 
-        public async Task<List<EnrollmentModel>> GetAllEnrollments()
+        public async Task<List<EnrollmentModel>> GetAllEnrollments(int offset, int fetchnext)
         {
             List<EnrollmentModel> enrollments = new List<EnrollmentModel>();
             try
@@ -46,15 +46,17 @@ namespace E_learning.DAL.Enrollment
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "SELECT * FROM Enrollments";
+                    string query = "SELECT EnrollmentID, EnrollmentID, CourseID  FROM Enrollments ODER BY EnrollmentID OFFSET @offset ROWS FETCH NEXT @fetchnext ROWS ONLY";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
                         {
+                            command.Parameters.AddWithValue("@offset", offset);
+                            command.Parameters.AddWithValue("@fetchnext", fetchnext);
                             while (await reader.ReadAsync())
                             {
                                 string enrollmentID = reader.GetString(reader.GetOrdinal("EnrollmentID"));
-                                string userID = reader.GetString(reader.GetOrdinal("UserID"));
+                                string userID = reader.GetString(reader.GetOrdinal("EnrollmentID"));
                                 string courseID = reader.GetString(reader.GetOrdinal("CourseID"));
                                 EnrollmentModel enrollment = new EnrollmentModel(enrollmentID, userID, courseID);
                                 enrollments.Add(enrollment);

@@ -27,11 +27,11 @@ namespace E_learning.Controllers.Enrollment
         [ProducesResponseType(typeof(IEnumerable<EnrollmentModel>), statusCode: 200)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetAllEnrollments()
+        public async Task<IActionResult> GetAllEnrollments(int offset, int fetchnext)
         {
             try
             {
-                var enrollments = await _enrollmentRepo.GetAllEnrollments();
+                var enrollments = await _enrollmentRepo.GetAllEnrollments(offset, fetchnext);
                 if (enrollments == null || !enrollments.Any())
                 {
                     return NotFound("No enrollments found");
