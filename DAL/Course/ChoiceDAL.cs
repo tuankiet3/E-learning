@@ -6,7 +6,7 @@ using E_learning.Model.Courses;
 using Microsoft.Extensions.Configuration;
 namespace E_learning.DAL.Course
 {
-  
+
     public class ChoiceDAL
     {
         private readonly string _connectionString;

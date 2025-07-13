@@ -2,7 +2,7 @@
 using E_learning.DAL.Course;
 using E_learning.Repositories.Auth;
 using E_learning.Repositories.Course;
-using E_learning.Repositories.Enrollment; 
+using E_learning.Repositories.Enrollment;
 using E_learning.DAL.Enrollment;
 using E_learning.Services;
 using E_learning.Services.VNPay;
@@ -12,13 +12,10 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using E_learning.Repositories.Payment;
 using E_learning.DAL.Payment;
-<<<<<<< HEAD
 using E_learning.Services.Zoom;
-=======
-using E_learning.DAL.Enrollment;
+using E_learning.Services.Lesson;
 using E_learning.Services.Lesson;
 
->>>>>>> 80fe94d7003cd1b98018f9d149a025dab6424f68
 
 var builder = WebApplication.CreateBuilder(args);
 
