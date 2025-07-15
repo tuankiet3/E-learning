@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using System.Text.RegularExpressions;
 using E_learning.Services.Cloude;
 using E_learning.Model.cloudeDB;
+using E_learning.Repositories.Enrollment;
 namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
@@ -21,8 +22,9 @@ namespace E_learning.Controllers.Course
         private readonly ConvertURL _convertURL;
         private readonly BackblazeService _backblazeService;
         private readonly RedisService _redisService;
+        private readonly IEnrollmentRepository _enrollmentRepo;
 
-        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID exsistingID, ConvertURL convertURL, BackblazeService backblazeService, RedisService redisService )
+        public LessonController(ILogger<CourseController> logger, ICourseRepository courseRepo, GenerateID generateID, CheckExsistingID exsistingID, ConvertURL convertURL, BackblazeService backblazeService, RedisService redisService, IEnrollmentRepository enrollmentRepository )
         {
             _logger = logger;
             _courseRepo = courseRepo;
@@ -31,6 +33,7 @@ namespace E_learning.Controllers.Course
             _convertURL = convertURL;
             _backblazeService = backblazeService;
             _redisService = redisService;
+            _enrollmentRepo = enrollmentRepository;
 
         }
         [HttpGet("GetLessonsByCourseID/{courseID}")]
@@ -155,20 +158,23 @@ namespace E_learning.Controllers.Course
                 _logger.LogWarning("❌ User ID is missing in the token.");
                 return Unauthorized();
             }
-
-            bool hasAccess = await _courseRepo.checkBuyCourse(userId, lessonId);
+            string courseID = await _courseRepo.getCourseIDbyLessonID(lessonId);
+            Console.WriteLine($"🔍 Course ID for lesson {lessonId} is {courseID}");
+            bool hasAccess = await _enrollmentRepo.checkBuyCourse(userId, courseID);
+            Console.WriteLine($"🔍 User {userId} has access to course {courseID}: {hasAccess}");
             if (!hasAccess)
             {
                 _logger.LogWarning($"❌ User {userId} does not have access to lesson {lessonId}.");
                 return Forbid();
             }
+            Console.WriteLine("✅ User has access to the video lesson.");
             // 🔥 Trả về rỗng nếu là HEAD (nghĩa là NGINX gọi), tránh lỗi upstream
             if (HttpContext.Request.Method == HttpMethods.Head)
             {
                 _logger.LogWarning("🔍 HEAD request received, returning 200 OK without body.");
                 return Ok(); // trả về 200 OK, không body
             }
-
+            Console.WriteLine("✅ User has access to the video lesson.");
             // Nếu là GET, trả về thông báo thành công
             _logger.LogWarning("✅ Access granted for GET request.");
             return Ok(new { message = "Access granted" }); // nếu bạn test thủ công qua GET

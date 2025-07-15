@@ -56,5 +56,8 @@ namespace E_learning.Services
             return $"QTID{numberString}";
         }
 
+        public string generateStudentID() => $"SID{generateID()}";
+        public string generateLecturerID() => $"LEC{generateID()}";
+        public string generateAdminID() => $"ADID{generateID()}";
     }
 }

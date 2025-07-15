@@ -3,6 +3,8 @@ using E_learning.Model.Courses;
 using E_learning.DTO.Course;
 using E_learning.Services;
 using E_learning.Repositories.Course;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authorization;
 namespace E_learning.Controllers.Course
 {
     [Route("api/[controller]")]
@@ -20,7 +22,7 @@ namespace E_learning.Controllers.Course
             _generateID = generateID;
             _checkExsistingID = exsistingID;
         }
-
+        [Authorize(Roles = "Admin,User")]
         [HttpGet("GetAllCourses")]
         [ProducesResponseType(typeof(IEnumerable<CoursesModel>), statusCode: 200)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -34,6 +36,7 @@ namespace E_learning.Controllers.Course
                 {
                     return NotFound("No courses found");
                 }
+                
                 return Ok(courses);
             }
             catch (Exception ex)

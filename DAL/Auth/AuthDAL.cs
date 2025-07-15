@@ -1,4 +1,6 @@
-﻿using E_learning.Model.Users;
+﻿using E_learning.Enums;
+using E_learning.Model.Users;
+using E_learning.Enums;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 
@@ -31,13 +33,17 @@ namespace E_learning.DAL.Auth
                         {
                             if (await reader.ReadAsync())
                             {
+                                Enum.TryParse<UserRole>(reader.GetString(reader.GetOrdinal("UserRole")), true, out var role);
                                 user = new UserModel
                                 {
                                     UserID = reader.GetString(reader.GetOrdinal("UserID")),
                                     Username = reader.GetString(reader.GetOrdinal("Username")),
-                                    Password = reader.GetString(reader.GetOrdinal("Password")), 
+                                    Password = reader.GetString(reader.GetOrdinal("Password")),
                                     Email = reader.GetString(reader.GetOrdinal("Email")),
-                                    UserRole = reader.GetString(reader.GetOrdinal("UserRole"))
+                                    FirstName = reader.GetString(reader.GetOrdinal("FirstName")),
+                                    LastName = reader.GetString(reader.GetOrdinal("LastName")),
+                                    FullName = $"{reader.GetString(reader.GetOrdinal("FirstName"))} {reader.GetString(reader.GetOrdinal("LastName"))}",
+                                    UserRole = role
                                 };
                             }
                         }
@@ -69,38 +75,54 @@ namespace E_learning.DAL.Auth
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking if username exists: {Username}", username);
-                return true; 
+                return true;
             }
         }
 
-        public async Task<bool> AddUserAsync(UserModel user)
+        public async Task AddUserAsync(UserModel user, SqlConnection connection, SqlTransaction transaction)
         {
-            try
+            string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, FullName, UserRole) 
+                             VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName, @FullName, @UserRole)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                using (SqlConnection connection = new SqlConnection(_connectionString))
-                {
-                    await connection.OpenAsync();
-                    string query = @"INSERT INTO Users (UserID, Username, Password, Email, FirstName, LastName, UserRole) 
-                             VALUES (@UserID, @Username, @Password, @Email, @FirstName, @LastName, @UserRole)";
-                    using (SqlCommand command = new SqlCommand(query, connection))
-                    {
-                        command.Parameters.AddWithValue("@UserID", user.UserID);
-                        command.Parameters.AddWithValue("@Username", user.Username);
-                        command.Parameters.AddWithValue("@Password", user.Password);
-                        command.Parameters.AddWithValue("@Email", user.Email);
-                        command.Parameters.AddWithValue("@FirstName", user.FirstName);
-                        command.Parameters.AddWithValue("@LastName", user.LastName);
-                        command.Parameters.AddWithValue("@UserRole", user.UserRole);
-
-                        int rowsAffected = await command.ExecuteNonQueryAsync();
-                        return rowsAffected > 0;
-                    }
-                }
+                command.Parameters.AddWithValue("@UserID", user.UserID);
+                command.Parameters.AddWithValue("@Username", user.Username);
+                command.Parameters.AddWithValue("@Password", user.Password);
+                command.Parameters.AddWithValue("@Email", user.Email);
+                command.Parameters.AddWithValue("@FirstName", user.FirstName);
+                command.Parameters.AddWithValue("@LastName", user.LastName);
+                command.Parameters.AddWithValue("@FullName", user.FullName);
+                command.Parameters.AddWithValue("@UserRole", user.UserRole.ToString());
+                await command.ExecuteNonQueryAsync();
             }
-            catch (Exception ex)
+        }
+
+        public async Task AddStudentAsync(string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Students (UserID) VALUES (@UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
             {
-                _logger.LogError(ex, "Error adding new user: {Username}", user.Username);
-                return false;
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task AddLecturerAsync(string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Lecturers (UserID) VALUES (@UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+        public async Task AddAdminAsync(string userID, SqlConnection connection, SqlTransaction transaction)
+        {
+            string query = "INSERT INTO Admin (UserID) VALUES (@UserID)";
+            using (SqlCommand command = new SqlCommand(query, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@UserID", userID);
+                await command.ExecuteNonQueryAsync();
             }
         }
     }

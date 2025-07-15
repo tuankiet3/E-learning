@@ -14,5 +14,6 @@ namespace E_learning.Repositories.Enrollment
         public Task<List<EnrollmentModel>> GetAllEnrollments(int offset, int fetchnext) => _enrollmentDAL.GetAllEnrollments(offset, fetchnext);
         public Task<List<EnrollmentModel>> getEnrollbyUserID(string userID) => _enrollmentDAL.getEnrollbyUserID(userID);
         public Task<List<string>> GetAllEnrollmentsID() => _enrollmentDAL.GetAllEnrollmentsID();
+        public Task<bool> checkBuyCourse(string userID, string courseID) => _enrollmentDAL.checkBuyCourse(userID, courseID);
     }
 }

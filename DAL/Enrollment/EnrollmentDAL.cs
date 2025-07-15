@@ -19,12 +19,12 @@ namespace E_learning.DAL.Enrollment
                 using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    string query = "INSERT INTO Enrollments (EnrollmentID, StudentID, CourseID) VALUES (@EnrollmentID, @StudentID, @CourseID)";
+                    string query = "INSERT INTO Enrollments (EnrolmentID, StudentID, CourseID) VALUES (@EnrolmentID, @StudentID, @CourseID)";
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {
-                        command.Parameters.AddWithValue("@EnrollmentID", Enroll.GetEnrollmentID);
-                        command.Parameters.AddWithValue("@StudentID", Enroll.GetUserID);
-                        command.Parameters.AddWithValue("@CourseID", Enroll.GetCourseID);
+                        command.Parameters.AddWithValue("@EnrolmentID", Enroll.GetEnrollmentID());
+                        command.Parameters.AddWithValue("@StudentID", Enroll.GetUserID());
+                        command.Parameters.AddWithValue("@CourseID", Enroll.GetCourseID());
                    
                         int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
@@ -130,6 +130,43 @@ namespace E_learning.DAL.Enrollment
                 _logger.LogError(ex, "Error retrieving enrollments for UserID: {UserID}", userID);
             }
             return enrollments;
+        }
+
+        public async Task<bool> checkBuyCourse(string userID, string courseID)
+        {
+            try
+            {
+                Console.WriteLine("Step 1");
+                using (SqlConnection connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+           
+
+                    const string query = "SELECT COUNT(*) FROM Enrollments WHERE StudentID = @StudentID AND CourseID = @CourseID";
+
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@StudentID", userID);
+                        command.Parameters.AddWithValue("@CourseID", courseID);
+
+                        int count = (int)await command.ExecuteScalarAsync();
+                        Console.WriteLine("count:" +count);
+                        if(count > 0)
+                        {
+                            return true; // User has already bought the course
+                        }
+                        else
+                        {
+                            return false; // User has not bought the course
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log the exception (not implemented here)
+                return false;
+            }
         }
     }
 }

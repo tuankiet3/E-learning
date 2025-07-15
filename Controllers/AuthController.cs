@@ -1,22 +1,22 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using E_learning.DTO;
 using E_learning.Model.Users;
-using E_learning.Repositories;
-using Microsoft.AspNetCore.Components;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using E_learning.Services;
 using Microsoft.AspNetCore.Authorization;
+using E_learning.DTO.Auth;
+using E_learning.Repositories.Auth;
+using E_learning.Enums;
 
 namespace E_learning.Controllers
 {
     [ApiController]
-    [Microsoft.AspNetCore.Mvc.Route("api/[controller]")]
+    [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly IAuthRepository _authRepo ;
+        private readonly IAuthRepository _authRepo;
         private readonly IConfiguration _configuration;
         private readonly GenerateID _generateID;
 
@@ -28,12 +28,17 @@ namespace E_learning.Controllers
         }
 
         [HttpPost("register")]
-        [AllowAnonymous] 
+        [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] RegisterDTO registerDto)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
+            }
+
+            if (!Enum.TryParse<UserRole>(registerDto.UserRole, true, out var userRoleEnum))
+            {
+                return BadRequest(new { Message = "Invalid user role provided. Valid roles are: Student, Lecturer, Admin." });
             }
 
             var userExists = await _authRepo.CheckUsernameExistsAsync(registerDto.Username);
@@ -49,8 +54,9 @@ namespace E_learning.Controllers
                 Email = registerDto.Email,
                 FirstName = registerDto.FirstName,
                 LastName = registerDto.LastName,
+                FullName = $"{registerDto.FirstName} {registerDto.LastName}",
                 Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
-                UserRole = "Student"
+                UserRole = userRoleEnum
             };
 
             var result = await _authRepo.AddUserAsync(user);
@@ -74,8 +80,8 @@ namespace E_learning.Controllers
             }
 
             var token = GenerateJwtToken(user);
-
-            return Ok(new { token = token });
+        
+            return Ok(new { token });
         }
 
         private string GenerateJwtToken(UserModel user)
@@ -85,10 +91,10 @@ namespace E_learning.Controllers
 
             var claims = new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, user.UserID),
+                new Claim("UserID", user.UserID),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(ClaimTypes.Role, user.UserRole)
+                new Claim(ClaimTypes.Role, user.UserRole.ToString())
             };
 
             var token = new JwtSecurityToken(

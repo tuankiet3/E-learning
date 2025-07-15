@@ -31,7 +31,6 @@ namespace E_learning.DAL.Course
                     {
                         command.Parameters.AddWithValue("@offset", offset);
                         command.Parameters.AddWithValue("@fetchnext", fetchnext);
-                        Console.WriteLine("Step 1");
                         using (SqlDataReader reader = await command.ExecuteReaderAsync())
                         {
                             while (await reader.ReadAsync())
@@ -42,7 +41,7 @@ namespace E_learning.DAL.Course
                                 string courseDescription = reader.GetString(reader.GetOrdinal("CourseDescription"));
                                 string authorID = reader.GetString(reader.GetOrdinal("AuthorID"));
                                 CoursesModel course = new CoursesModel(courseID, courseName, coursePrice, courseDescription, authorID);
-                                Console.WriteLine("Step 2");
+                         
                                 courses.Add(course);
                             }
                         }

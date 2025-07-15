@@ -8,5 +8,6 @@ namespace E_learning.Repositories.Enrollment
         Task<bool> InsertEnrollment(EnrollmentModel enrollment);
         Task<List<EnrollmentModel>> GetAllEnrollments(int offset, int fetchnext);
         Task<List<string>> GetAllEnrollmentsID();
+        Task<bool> checkBuyCourse(string userID, string courseID);
     }
 }
